@@ -1,6 +1,8 @@
 import { Link } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
+import { Colors } from "@/constants/theme";
+
 export default function ModalScreen() {
   return (
     <View style={styles.container}>
@@ -18,8 +20,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 20,
+    backgroundColor: Colors.background,
   },
   title: {
+    color: Colors.text,
     fontSize: 28,
     fontWeight: "700",
   },
@@ -28,6 +32,6 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
   },
   linkText: {
-    color: "#0a7ea4",
+    color: Colors.accent,
   },
 });
