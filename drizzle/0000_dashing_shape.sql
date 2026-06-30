@@ -39,6 +39,7 @@ CREATE TABLE `transactions` (
 	`subcategory_id` text,
 	`amount` integer NOT NULL,
 	`direction` text NOT NULL,
+	`title` text,
 	`note` text,
 	`date` integer NOT NULL,
 	`created_at` integer DEFAULT (unixepoch() * 1000) NOT NULL,

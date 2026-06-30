@@ -86,6 +86,10 @@ export const transactions = sqliteTable("transactions", {
   /** Positive magnitude in minor units; `direction` carries the sign. */
   amount: integer("amount").notNull(),
   direction: text("direction", { enum: ["expense", "income"] }).notNull(),
+  /** Display title. Null means "fall back to the subcategory's name"; set it to
+   *  override (e.g. "Weekly shop" instead of "Groceries"). */
+  title: text("title"),
+  /** Optional free-text memo for extra detail. */
   note: text("note"),
   /** When the transaction happened (ms epoch) — fast range/sort queries. */
   date: integer("date", { mode: "timestamp_ms" }).notNull(),

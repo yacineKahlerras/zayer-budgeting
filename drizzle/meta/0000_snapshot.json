@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ec3dfbf4-2c55-45d9-bad8-8266ae9b3085",
+  "id": "b763e83c-cd89-466a-91f0-69a916b78c31",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "budgets": {
@@ -279,6 +279,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "note": {

@@ -1,9 +1,11 @@
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
+import { useDatabase } from "@/db/use-database";
 import { Colors } from "@/constants/theme";
 
 export const unstable_settings = {
@@ -23,18 +25,56 @@ const navTheme = {
 };
 
 export default function RootLayout() {
+  const { ready, error } = useDatabase();
+
   return (
     <SafeAreaProvider>
       <ThemeProvider value={navTheme}>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="modal"
-            options={{ presentation: "modal", title: "Modal" }}
-          />
-        </Stack>
+        {error ? (
+          <View style={styles.center}>
+            <Text style={styles.errorTitle}>Database error</Text>
+            <Text style={styles.errorText}>{error.message}</Text>
+          </View>
+        ) : !ready ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={Colors.accent} />
+            <Text style={styles.loadingText}>Preparing database…</Text>
+          </View>
+        ) : (
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="modal"
+              options={{ presentation: "modal", title: "Modal" }}
+            />
+          </Stack>
+        )}
         <StatusBar style="light" />
       </ThemeProvider>
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.background,
+    padding: 24,
+  },
+  loadingText: {
+    color: Colors.textMuted,
+    marginTop: 12,
+  },
+  errorTitle: {
+    color: Colors.negative,
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  errorText: {
+    color: Colors.textMuted,
+    textAlign: "center",
+  },
+});
