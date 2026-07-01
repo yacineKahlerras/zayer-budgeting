@@ -1,12 +1,13 @@
 import { Link } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
+import { ScreenTitle } from "@/components/ui/screen";
 import { Colors } from "@/constants/theme";
 
 export default function ModalScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>This is a modal</Text>
+      <ScreenTitle>This is a modal</ScreenTitle>
       <Link href="/" dismissTo style={styles.link}>
         <Text style={styles.linkText}>Go to home screen</Text>
       </Link>
@@ -21,11 +22,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 20,
     backgroundColor: Colors.background,
-  },
-  title: {
-    color: Colors.text,
-    fontSize: 28,
-    fontWeight: "700",
   },
   link: {
     marginTop: 15,
