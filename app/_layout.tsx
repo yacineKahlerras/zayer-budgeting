@@ -2,11 +2,11 @@ import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { useDatabase } from "@/db/use-database";
 import { Colors } from "@/constants/theme";
+import { useDatabase } from "@/db/use-database";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -46,6 +46,10 @@ export default function RootLayout() {
             <Stack.Screen
               name="modal"
               options={{ presentation: "modal", title: "Modal" }}
+            />
+            <Stack.Screen
+              name="add-transaction"
+              options={{ presentation: "modal", title: "add transaction" }}
             />
           </Stack>
         )}
