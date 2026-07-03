@@ -10,8 +10,11 @@ import { Plus } from "lucide-react-native";
 export default function HomeScreen() {
   return (
     <Screen>
-      <Pressable style={styles.fab}>
-        <Plus onPress={() => router.push("/add-transaction")} color="black" />
+      <Pressable
+        onPress={() => router.push("/add-transaction")}
+        style={styles.fab}
+      >
+        <Plus color="black" />
       </Pressable>
       <TransactionList
         header={

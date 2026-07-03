@@ -1,16 +1,32 @@
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { account } from "@/constants/mock-data";
 import { Colors } from "@/constants/theme";
-import { formatCurrency } from "@/utils/format";
+import { getTotalBalance } from "@/db/queries";
+import { formatCents } from "@/utils/format";
 
 /** The balance card shown at the top of the home screen. */
 export function AccountCard() {
+  const [balance, setBalance] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      getTotalBalance().then((b) => {
+        if (!cancelled) setBalance(b);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [])
+  );
+
   return (
     <View style={styles.card}>
-      <Text style={styles.holder}>{account.holder}</Text>
-      <Text style={styles.balance}>{formatCurrency(account.balance)}</Text>
-      <Text style={styles.balanceLabel}>Available balance</Text>
+      <Text style={styles.holder}>Total balance</Text>
+      <Text style={styles.balance}>{formatCents(balance)}</Text>
+      <Text style={styles.balanceLabel}>Across all wallets</Text>
     </View>
   );
 }

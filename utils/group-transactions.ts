@@ -1,12 +1,12 @@
-import { dateFor, type Transaction } from "@/constants/mock-data";
+import type { TransactionListItem } from "@/db/queries";
 
 export type DaySection = {
-  /** ISO-ish key like "2026-5-28" */
+  /** e.g. "2026-6-28" */
   key: string;
   dayLabel: string;
-  /** Month banner to show above this day, or null if same month as the day before. */
+  /** Month banner above this day, or null if same month as the previous day. */
   monthBanner: string | null;
-  data: Transaction[];
+  data: TransactionListItem[];
 };
 
 const DAY_FMT: Intl.DateTimeFormatOptions = {
@@ -21,12 +21,12 @@ const MONTH_FMT: Intl.DateTimeFormatOptions = {
 };
 
 /** Group a flat, date-descending list into day sections with month banners. */
-export function groupByDay(txns: Transaction[]): DaySection[] {
+export function groupByDay(txns: TransactionListItem[]): DaySection[] {
   const sections: DaySection[] = [];
   let lastMonthKey: string | null = null;
 
   for (const t of txns) {
-    const d = dateFor(t.daysAgo);
+    const d = t.date;
     const dayKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
     const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
 

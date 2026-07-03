@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useRef, useState } from "react";
 
-import { getTransactions, type Transaction } from "@/constants/mock-data";
+import { getTransactionsPage, type TransactionListItem } from "@/db/queries";
 import { groupByDay, type DaySection } from "@/utils/group-transactions";
 
 const PAGE_SIZE = 20;
@@ -13,32 +14,49 @@ type PaginatedTransactions = {
 };
 
 /**
- * Loads transactions page-by-page and groups them into day sections.
- * Encapsulates the infinite-scroll state machine so screens stay declarative.
+ * Loads transactions page-by-page from the database and groups them into day
+ * sections. Re-fetches the first page whenever the screen regains focus, so a
+ * transaction added in the modal shows up on return.
  */
 export function usePaginatedTransactions(): PaginatedTransactions {
-  const [items, setItems] = useState<Transaction[]>(() =>
-    getTransactions(0, PAGE_SIZE)
-  );
-  const [page, setPage] = useState(0);
+  const [items, setItems] = useState<TransactionListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const pageRef = useRef(0);
 
   const sections = useMemo(() => groupByDay(items), [items]);
 
-  const loadMore = useCallback(() => {
+  // Reload from scratch when the screen focuses.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        const first = await getTransactionsPage(0, PAGE_SIZE);
+        if (cancelled) return;
+        setItems(first);
+        pageRef.current = 0;
+        setDone(first.length < PAGE_SIZE);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [])
+  );
+
+  const loadMore = useCallback(async () => {
     if (loading || done) return;
     setLoading(true);
-    const next = page + 1;
-    const batch = getTransactions(next, PAGE_SIZE);
+    const next = pageRef.current + 1;
+    const batch = await getTransactionsPage(next, PAGE_SIZE);
     if (batch.length === 0) {
       setDone(true);
     } else {
       setItems((prev) => [...prev, ...batch]);
-      setPage(next);
+      pageRef.current = next;
+      if (batch.length < PAGE_SIZE) setDone(true);
     }
     setLoading(false);
-  }, [loading, done, page]);
+  }, [loading, done]);
 
   return { sections, loading, done, loadMore };
 }

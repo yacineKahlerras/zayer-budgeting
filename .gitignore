@@ -42,3 +42,5 @@ screens
 # generated native folders
 /ios
 /android
+
+.claude

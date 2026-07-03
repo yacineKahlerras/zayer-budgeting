@@ -29,6 +29,14 @@ export function TransactionList({ header }: Props) {
         </View>
       )}
       ListHeaderComponent={header}
+      ListEmptyComponent={
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>No transactions yet</Text>
+          <Text style={styles.emptyText}>
+            Tap the + button to add your first one.
+          </Text>
+        </View>
+      }
       contentContainerStyle={styles.listContent}
       stickySectionHeadersEnabled={false}
       onEndReached={loadMore}
@@ -36,7 +44,7 @@ export function TransactionList({ header }: Props) {
       ListFooterComponent={
         loading ? (
           <ActivityIndicator color={Colors.textMuted} style={styles.footer} />
-        ) : done ? (
+        ) : done && sections.length > 0 ? (
           <Text style={styles.endText}>No more transactions</Text>
         ) : null
       }
@@ -74,5 +82,19 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginVertical: 20,
     fontSize: 13,
+  },
+  empty: {
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  emptyTitle: {
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  emptyText: {
+    color: Colors.textMuted,
+    fontSize: 14,
+    marginTop: 6,
   },
 });

@@ -1,20 +1,25 @@
+import { ArrowDownLeft, ArrowUpRight } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 
-import { iconFor, type Transaction } from "@/constants/mock-data";
 import { Colors } from "@/constants/theme";
-import { formatCurrency } from "@/utils/format";
+import type { TransactionListItem } from "@/db/queries";
+import { formatCents } from "@/utils/format";
 
-/** A single transaction line: icon, name/type, and signed amount. */
-export function TransactionRow({ item }: { item: Transaction }) {
+/** A single transaction line: direction icon, title/category, signed amount. */
+export function TransactionRow({ item }: { item: TransactionListItem }) {
   const isIncome = item.amount >= 0;
   return (
     <View style={styles.row}>
       <View style={styles.iconCircle}>
-        <Text style={styles.icon}>{iconFor(item.type)}</Text>
+        {isIncome ? (
+          <ArrowDownLeft size={20} color={Colors.positive} />
+        ) : (
+          <ArrowUpRight size={20} color={Colors.textMuted} />
+        )}
       </View>
       <View style={styles.rowInfo}>
-        <Text style={styles.rowName}>{item.name}</Text>
-        <Text style={styles.rowMeta}>{item.type}</Text>
+        <Text style={styles.rowName}>{item.title}</Text>
+        <Text style={styles.rowMeta}>{item.categoryName}</Text>
       </View>
       <Text
         style={[
@@ -23,7 +28,7 @@ export function TransactionRow({ item }: { item: Transaction }) {
         ]}
       >
         {isIncome ? "+" : "-"}
-        {formatCurrency(item.amount)}
+        {formatCents(item.amount)}
       </Text>
     </View>
   );
@@ -42,9 +47,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.cardElevated,
-  },
-  icon: {
-    fontSize: 20,
   },
   rowInfo: {
     flex: 1,

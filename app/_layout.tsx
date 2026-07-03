@@ -49,7 +49,7 @@ export default function RootLayout() {
             />
             <Stack.Screen
               name="add-transaction"
-              options={{ presentation: "modal", title: "add transaction" }}
+              options={{ presentation: "modal", headerShown: false }}
             />
           </Stack>
         )}
