@@ -317,37 +317,29 @@ export default function AddTransaction() {
             />
           </Pressable>
 
-          <View style={styles.directionStack}>
-            <Pressable
+          {/* Single toggle: tap to flip Expense ↔ Income. Vertically centered
+              beside the amount, well away from the header's confirm button. */}
+          <Pressable
+            style={styles.directionStack}
+            hitSlop={8}
+            onPress={() =>
+              selectDirection(direction === "expense" ? "income" : "expense")
+            }
+          >
+            <View
               style={[
                 styles.dirBtn,
-                direction === "income" && styles.dirBtnIncome,
+                direction === "expense"
+                  ? styles.dirBtnExpense
+                  : styles.dirBtnIncome,
               ]}
-              hitSlop={6}
-              onPress={() => selectDirection("income")}
             >
-              <Plus
-                size={20}
-                color={
-                  direction === "income" ? Colors.positive : Colors.textMuted
-                }
-              />
-            </Pressable>
-            <Pressable
-              style={[
-                styles.dirBtn,
-                direction === "expense" && styles.dirBtnExpense,
-              ]}
-              hitSlop={6}
-              onPress={() => selectDirection("expense")}
-            >
-              <Minus
-                size={20}
-                color={
-                  direction === "expense" ? Colors.negative : Colors.textMuted
-                }
-              />
-            </Pressable>
+              {direction === "expense" ? (
+                <Minus size={20} color={Colors.negative} />
+              ) : (
+                <Plus size={20} color={Colors.positive} />
+              )}
+            </View>
             <Text
               style={[
                 styles.dirTagText,
@@ -359,7 +351,7 @@ export default function AddTransaction() {
             >
               {direction === "expense" ? "Expense" : "Income"}
             </Text>
-          </View>
+          </Pressable>
         </View>
 
         {/* Wallet */}
@@ -547,11 +539,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
+    // Keep the direction toggle clearly below the header's confirm button.
+    marginTop: 16,
     marginBottom: 6,
   },
   directionStack: {
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   dirBtn: {
     width: 40,
