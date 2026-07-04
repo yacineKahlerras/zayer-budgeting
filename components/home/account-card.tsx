@@ -1,21 +1,21 @@
-import { Check, ChevronDown } from "lucide-react-native";
-import { useState } from "react";
-import {
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ArrowDownLeft, ArrowUpRight, Check, ChevronDown } from "lucide-react-native";
+import { useEffect, useState } from "react";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
-import type { WalletWithBalance } from "@/db/queries";
+import {
+  getPeriodSummary,
+  periodRange,
+  type PeriodSummary,
+  type WalletWithBalance,
+} from "@/db/queries";
 import { formatCents } from "@/utils/format";
 
 /**
- * Balance card for the selected wallet, with a sleek dropdown on the card to
- * switch wallets. Wallets are independent ledgers in their own currencies, so
- * there is deliberately no combined "All" view.
+ * The balance header. Modern fintech treatment: the number floats directly on
+ * the background (no card box), with the wallet switcher as a quiet pill and a
+ * glanceable month in/out summary underneath. Wallets are independent ledgers
+ * in their own currencies, so there is deliberately no combined "All" view.
  */
 export function AccountCard({
   wallets,
@@ -27,19 +27,32 @@ export function AccountCard({
   onSelect: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [month, setMonth] = useState<PeriodSummary | null>(null);
   const selected =
     wallets.find((w) => w.id === selectedWalletId) ?? wallets[0] ?? null;
 
+  // This month's in/out for the selected wallet (Copilot-style glance line).
+  useEffect(() => {
+    // Clear immediately so a wallet switch never flashes the previous
+    // wallet's numbers under the new wallet's currency symbol.
+    setMonth(null);
+    if (!selected?.id) return;
+    let cancelled = false;
+    const { start, end } = periodRange("month", new Date());
+    getPeriodSummary(selected.id, start, end).then((s) => {
+      if (!cancelled) setMonth(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // `wallets` is included so the glance refreshes on focus reloads.
+  }, [selected?.id, wallets]);
+
   return (
-    <View style={styles.card}>
-      <Text style={styles.label}>Balance</Text>
+    <View style={styles.wrap}>
+      <View style={styles.topRow}>
+        <Text style={styles.eyebrow}>Balance</Text>
 
-      <View style={styles.balanceRow}>
-        <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit>
-          {formatCents(selected?.balance ?? 0, selected?.currency)}
-        </Text>
-
-        {/* Wallet dropdown trigger */}
         <Pressable
           style={styles.trigger}
           onPress={() => wallets.length > 1 && setOpen(true)}
@@ -47,14 +60,35 @@ export function AccountCard({
         >
           <Text style={styles.triggerText}>{selected?.name ?? "—"}</Text>
           {wallets.length > 1 && (
-            <ChevronDown size={14} color={Colors.textMuted} />
+            <ChevronDown size={13} color={Colors.textMuted} />
           )}
         </Pressable>
       </View>
 
-      <Text style={styles.sub}>{selected?.currency ?? ""}</Text>
+      <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit>
+        {formatCents(selected?.balance ?? 0, selected?.currency)}
+      </Text>
 
-      {/* Dropdown menu */}
+      {/* Month at a glance */}
+      <View style={styles.glanceRow}>
+        <View style={styles.glanceItem}>
+          <ArrowDownLeft size={14} color={Colors.positive} />
+          <Text style={styles.glanceIn}>
+            {formatCents(month?.income ?? 0, selected?.currency)}
+          </Text>
+        </View>
+        <View style={styles.glanceItem}>
+          <ArrowUpRight size={14} color={Colors.negative} />
+          <Text style={styles.glanceOut}>
+            {formatCents(month?.expense ?? 0, selected?.currency)}
+          </Text>
+        </View>
+        <Text style={styles.glanceCaption}>this month</Text>
+      </View>
+
+      <View style={styles.divider} />
+
+      {/* Wallet picker */}
       <Modal
         visible={open}
         transparent
@@ -99,55 +133,77 @@ export function AccountCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.card,
-    borderRadius: 20,
-    padding: 24,
-    marginTop: 12,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  wrap: {
+    marginTop: 20,
+    marginBottom: 16,
   },
-  label: {
-    color: Colors.textMuted,
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  balanceRow: {
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
-    marginTop: 8,
   },
-  balance: {
-    flex: 1,
-    color: Colors.text,
-    fontSize: 40,
-    fontWeight: "800",
-    letterSpacing: -1,
-    fontVariant: ["tabular-nums"],
+  eyebrow: {
+    fontSize: 11,
+    letterSpacing: 1.6,
+    textTransform: "uppercase",
+    color: Colors.textMuted,
+    fontWeight: "600",
   },
   trigger: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: Colors.cardElevated,
+    backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   triggerText: {
     color: Colors.text,
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: "600",
   },
-  sub: {
-    color: Colors.textMuted,
+  balance: {
+    color: Colors.text,
+    fontSize: 52,
+    fontWeight: "800",
+    letterSpacing: -1.5,
+    marginTop: 10,
+    fontVariant: ["tabular-nums"],
+  },
+  glanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginTop: 10,
+  },
+  glanceItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  glanceIn: {
+    color: Colors.positive,
     fontSize: 13,
-    marginTop: 4,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
+  glanceOut: {
+    color: Colors.negative,
+    fontSize: 13,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
+  glanceCaption: {
+    color: Colors.textMuted,
+    fontSize: 12,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginTop: 20,
   },
 
   backdrop: {

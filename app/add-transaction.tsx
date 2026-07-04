@@ -301,35 +301,53 @@ export default function AddTransaction() {
         keyboardShouldPersistTaps="handled"
         bottomOffset={20}
       >
-        {/* Direction: minimalist − / + with a small label tag */}
-        <View style={styles.directionRow}>
+        {/* Amount on the left; vertical + / − direction stack on the right */}
+        <View style={styles.amountSection}>
           <Pressable
-            style={[
-              styles.dirBtn,
-              direction === "expense" && styles.dirBtnExpense,
-            ]}
-            hitSlop={6}
-            onPress={() => selectDirection("expense")}
+            style={styles.amountBlock}
+            onPress={() => amountInputRef.current?.focus()}
           >
-            <Minus
-              size={22}
-              color={direction === "expense" ? Colors.negative : Colors.textMuted}
+            <Text style={styles.amountLabel}>Amount</Text>
+            <AmountInput
+              ref={amountInputRef}
+              value={amount}
+              onChangeText={setAmount}
+              currency={wallet?.currency ?? "USD"}
+              autoFocus
             />
           </Pressable>
-          <Pressable
-            style={[
-              styles.dirBtn,
-              direction === "income" && styles.dirBtnIncome,
-            ]}
-            hitSlop={6}
-            onPress={() => selectDirection("income")}
-          >
-            <Plus
-              size={22}
-              color={direction === "income" ? Colors.positive : Colors.textMuted}
-            />
-          </Pressable>
-          <View style={styles.dirTag}>
+
+          <View style={styles.directionStack}>
+            <Pressable
+              style={[
+                styles.dirBtn,
+                direction === "income" && styles.dirBtnIncome,
+              ]}
+              hitSlop={6}
+              onPress={() => selectDirection("income")}
+            >
+              <Plus
+                size={20}
+                color={
+                  direction === "income" ? Colors.positive : Colors.textMuted
+                }
+              />
+            </Pressable>
+            <Pressable
+              style={[
+                styles.dirBtn,
+                direction === "expense" && styles.dirBtnExpense,
+              ]}
+              hitSlop={6}
+              onPress={() => selectDirection("expense")}
+            >
+              <Minus
+                size={20}
+                color={
+                  direction === "expense" ? Colors.negative : Colors.textMuted
+                }
+              />
+            </Pressable>
             <Text
               style={[
                 styles.dirTagText,
@@ -343,21 +361,6 @@ export default function AddTransaction() {
             </Text>
           </View>
         </View>
-
-        {/* Amount — real visible input so the keyboard reliably appears */}
-        <Pressable
-          style={styles.amountBlock}
-          onPress={() => amountInputRef.current?.focus()}
-        >
-          <Text style={styles.amountLabel}>Amount</Text>
-          <AmountInput
-            ref={amountInputRef}
-            value={amount}
-            onChangeText={setAmount}
-            currency={wallet?.currency ?? "USD"}
-            autoFocus
-          />
-        </Pressable>
 
         {/* Wallet */}
         <Pressable style={styles.walletRow} onPress={cycleWallet}>
@@ -540,16 +543,20 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
 
-  directionRow: {
+  amountSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 24,
+    gap: 16,
+    marginBottom: 6,
+  },
+  directionStack: {
+    alignItems: "center",
+    gap: 8,
   },
   dirBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -564,22 +571,13 @@ const styles = StyleSheet.create({
     borderColor: Colors.positive,
     backgroundColor: "#0F2E24",
   },
-  dirTag: {
-    marginLeft: 2,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
   dirTagText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
   },
 
   amountBlock: {
-    marginBottom: 6,
+    flex: 1,
     gap: 4,
   },
   amountLabel: {
