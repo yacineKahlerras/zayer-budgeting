@@ -197,15 +197,15 @@ export default function AddTransaction() {
       Alert.alert("No wallet", "Add a wallet first.");
       return;
     }
-    // Category is optional. When absent, fall back to a title so the row still
-    // reads sensibly instead of "Uncategorized".
-    const fallbackTitle = direction === "income" ? "Income" : "Expense";
+    // Store only a genuine user-entered title. Display fallbacks (subcategory
+    // name, or "Income"/"Expense" when uncategorized) are computed at read time
+    // so they can never go stale when the transaction is later edited.
     const payload = {
       walletId: wallet.id,
       subcategoryId: subcategoryId ?? null,
       amount: cents,
       direction,
-      title: title.trim() || (subcategoryId ? null : fallbackTitle),
+      title: title.trim() || null,
       note: memo.trim() || null,
       date,
     };

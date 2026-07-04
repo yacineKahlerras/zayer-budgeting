@@ -288,7 +288,12 @@ export async function getTransactionsPage(
     id: r.id,
     // sign the amount for display: expense negative, income positive
     amount: r.direction === "expense" ? -r.amount : r.amount,
-    title: r.title ?? r.subName ?? "Uncategorized",
+    // Display fallback, computed at read time so it can never go stale:
+    // custom title > subcategory name > direction label.
+    title:
+      r.title ??
+      r.subName ??
+      (r.direction === "expense" ? "Expense" : "Income"),
     categoryName: r.catName ?? "Uncategorized",
     date: r.date,
   }));
@@ -721,7 +726,12 @@ export async function searchTransactions(
   return rows.map((r) => ({
     id: r.id,
     amount: r.direction === "expense" ? -r.amount : r.amount,
-    title: r.title ?? r.subName ?? "Uncategorized",
+    // Display fallback, computed at read time so it can never go stale:
+    // custom title > subcategory name > direction label.
+    title:
+      r.title ??
+      r.subName ??
+      (r.direction === "expense" ? "Expense" : "Income"),
     categoryName: r.catName ?? "Uncategorized",
     date: r.date,
   }));

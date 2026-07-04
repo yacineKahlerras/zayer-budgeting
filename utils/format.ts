@@ -50,6 +50,8 @@ export function toCents(input: string): number {
 /**
  * Group balances by currency. Summing across currencies is meaningless without
  * exchange rates, so combined totals are shown one-per-currency instead.
+ * Sorted by largest absolute balance first so the headline figure is the one
+ * that matters (an empty secondary-currency wallet must not bury it).
  */
 export function balancesByCurrency(
   wallets: { currency: string; balance: number }[]
@@ -60,5 +62,9 @@ export function balancesByCurrency(
   }
   return [...byCurrency.entries()]
     .map(([currency, balance]) => ({ currency, balance }))
-    .sort((a, b) => a.currency.localeCompare(b.currency));
+    .sort(
+      (a, b) =>
+        Math.abs(b.balance) - Math.abs(a.balance) ||
+        a.currency.localeCompare(b.currency)
+    );
 }
