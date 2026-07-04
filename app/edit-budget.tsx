@@ -5,12 +5,12 @@ import {
   Alert,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AmountInput } from "@/components/ui/amount-input";
 import { Chip } from "@/components/ui/chip";
 import { DeleteRow } from "@/components/ui/delete-row";
 import { ModalHeader } from "@/components/ui/modal-header";
@@ -24,7 +24,7 @@ import {
   updateBudget,
   type CategoryWithSubs,
 } from "@/db/queries";
-import { currencySymbol, toCents } from "@/utils/format";
+import { toCents } from "@/utils/format";
 
 // Sentinel for the "overall" (no category) budget scope.
 const OVERALL = "__overall__";
@@ -41,41 +41,38 @@ export default function EditBudget() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Load expense categories + the set of currencies the user actually has.
+  // Load everything in one effect so there's no race over the currency: the
+  // edited budget's own currency always wins and is always offered in the list.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [tree, wallets] = await Promise.all([
+      const [tree, wallets, budget] = await Promise.all([
         listCategoryTree("expense"),
         listWallets(),
+        id ? getBudget(id) : Promise.resolve(null),
       ]);
       if (cancelled) return;
-      setCategories(tree);
-      const uniqueCurrencies = [...new Set(wallets.map((w) => w.currency))];
-      if (uniqueCurrencies.length > 0) {
-        setCurrencies(uniqueCurrencies);
-        setCurrency((c) => (uniqueCurrencies.includes(c) ? c : uniqueCurrencies[0]));
-      }
-      if (!id) setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
 
-  // Edit mode: load the budget.
-  useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    getBudget(id).then((b) => {
-      if (cancelled) return;
-      if (b) {
-        setAmount((b.amount / 100).toFixed(2));
-        setCategoryId(b.categoryId ?? OVERALL);
-        setCurrency(b.currency);
+      setCategories(tree);
+
+      if (budget) {
+        setAmount((budget.amount / 100).toFixed(2));
+        setCategoryId(budget.categoryId ?? OVERALL);
       }
+
+      // Currency options = the user's wallet currencies, plus the budget's own
+      // currency (so an old budget in a no-longer-used currency stays editable).
+      const walletCurrencies = wallets.map((w) => w.currency);
+      const options = [
+        ...new Set([...(budget ? [budget.currency] : []), ...walletCurrencies]),
+      ];
+      if (options.length > 0) setCurrencies(options);
+
+      // Chosen currency: the budget's (edit) or the first available (create).
+      setCurrency(budget?.currency ?? options[0] ?? "USD");
+
       setLoading(false);
-    });
+    })();
     return () => {
       cancelled = true;
     };
@@ -154,20 +151,12 @@ export default function EditBudget() {
       >
         {/* Monthly limit */}
         <Text style={styles.label}>Monthly limit</Text>
-        <View style={styles.amountRow}>
-          <Text style={styles.amountCurrency}>{currencySymbol(currency)}</Text>
-          <TextInput
-            style={styles.amountInput}
-            value={amount}
-            onChangeText={(t) =>
-              setAmount(t.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1"))
-            }
-            keyboardType="decimal-pad"
-            placeholder="0.00"
-            placeholderTextColor={Colors.textMuted}
-            autoFocus={!editing}
-          />
-        </View>
+        <AmountInput
+          value={amount}
+          onChangeText={setAmount}
+          currency={currency}
+          autoFocus={!editing}
+        />
 
         {/* Scope */}
         <Text style={[styles.label, styles.section]}>Applies to</Text>
@@ -236,25 +225,6 @@ const styles = StyleSheet.create({
   },
   section: {
     marginTop: 28,
-  },
-  amountRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-  },
-  amountCurrency: {
-    fontSize: 32,
-    color: Colors.textMuted,
-    fontWeight: "500",
-    marginRight: 2,
-  },
-  amountInput: {
-    flex: 1,
-    fontSize: 46,
-    fontWeight: "700",
-    letterSpacing: -0.5,
-    color: Colors.text,
-    padding: 0,
-    fontVariant: ["tabular-nums"],
   },
   chips: {
     flexDirection: "row",

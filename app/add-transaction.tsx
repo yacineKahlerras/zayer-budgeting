@@ -17,6 +17,7 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AmountInput } from "@/components/ui/amount-input";
 import { Chip } from "@/components/ui/chip";
 import { DeleteRow } from "@/components/ui/delete-row";
 import { ModalHeader } from "@/components/ui/modal-header";
@@ -33,7 +34,7 @@ import {
 } from "@/db/queries";
 import type { Wallet } from "@/db/schema";
 import { categoryIcon } from "@/utils/category-icon";
-import { currencySymbol, monthShort, toCents } from "@/utils/format";
+import { monthShort, toCents } from "@/utils/format";
 
 // Enable LayoutAnimation on Android.
 if (
@@ -285,23 +286,13 @@ export default function AddTransaction() {
           onPress={() => amountInputRef.current?.focus()}
         >
           <Text style={styles.amountLabel}>Amount</Text>
-          <View style={styles.amountRow}>
-            <Text style={styles.amountCurrency}>
-              {currencySymbol(wallet?.currency ?? "USD")}
-            </Text>
-            <TextInput
-              ref={amountInputRef}
-              style={styles.amountInput}
-              value={amount}
-              onChangeText={(t) =>
-                setAmount(t.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1"))
-              }
-              keyboardType="decimal-pad"
-              placeholder="0.00"
-              placeholderTextColor={Colors.textMuted}
-              autoFocus
-            />
-          </View>
+          <AmountInput
+            ref={amountInputRef}
+            value={amount}
+            onChangeText={setAmount}
+            currency={wallet?.currency ?? "USD"}
+            autoFocus
+          />
         </Pressable>
 
         {/* Wallet */}
@@ -474,6 +465,7 @@ const styles = StyleSheet.create({
 
   amountBlock: {
     marginBottom: 6,
+    gap: 4,
   },
   amountLabel: {
     fontSize: 11,
@@ -481,26 +473,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: Colors.textMuted,
     fontWeight: "600",
-  },
-  amountRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    marginTop: 4,
-  },
-  amountCurrency: {
-    fontSize: 32,
-    color: Colors.textMuted,
-    fontWeight: "500",
-    marginRight: 2,
-  },
-  amountInput: {
-    flex: 1,
-    fontSize: 46,
-    fontWeight: "700",
-    letterSpacing: -0.5,
-    color: Colors.text,
-    padding: 0,
-    fontVariant: ["tabular-nums"],
   },
 
   walletRow: {

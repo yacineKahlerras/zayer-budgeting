@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { Plus, Trash2 } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -40,6 +40,9 @@ export default function EditCategory() {
   const [newSub, setNewSub] = useState("");
   const [loading, setLoading] = useState(editing);
   const [saving, setSaving] = useState(false);
+  // Monotonic counter for staged (not-yet-persisted) subcategory ids, so
+  // removing one never lets a later add reuse an existing id.
+  const stagedCounter = useRef(0);
 
   useEffect(() => {
     if (!id) return;
@@ -69,7 +72,8 @@ export default function EditCategory() {
       const subId = await addSubcategory(id, trimmed);
       setSubs((s) => [...s, { id: subId, name: trimmed }]);
     } else {
-      setSubs((s) => [...s, { id: `staged_${s.length}`, name: trimmed }]);
+      const stagedId = `staged_${stagedCounter.current++}`;
+      setSubs((s) => [...s, { id: stagedId, name: trimmed }]);
     }
   }
 
