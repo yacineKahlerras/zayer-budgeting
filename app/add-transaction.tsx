@@ -62,7 +62,10 @@ function formatDate(d: Date) {
 }
 
 export default function AddTransaction() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, walletId: presetWalletId } = useLocalSearchParams<{
+    id?: string;
+    walletId?: string;
+  }>();
   const editing = !!id;
 
   const [direction, setDirection] = useState<Direction>("expense");
@@ -82,16 +85,22 @@ export default function AddTransaction() {
 
   const amountInputRef = useRef<TextInput>(null);
 
-  // Load wallets once — they don't depend on direction.
+  // Load wallets once — they don't depend on direction. In create mode,
+  // preselect the wallet passed from the home screen (if any).
   useEffect(() => {
     let cancelled = false;
     listWallets().then((w) => {
-      if (!cancelled) setWallets(w);
+      if (cancelled) return;
+      setWallets(w);
+      if (!id && presetWalletId) {
+        const i = w.findIndex((x) => x.id === presetWalletId);
+        if (i >= 0) setWalletIndex(i);
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [id, presetWalletId]);
 
   // Load the category tree for the current direction.
   useEffect(() => {

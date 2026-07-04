@@ -9,11 +9,14 @@ import { TransactionRow } from "./transaction-row";
 type Props = {
   /** Rendered above the list (e.g. the account card + section title). */
   header?: ReactElement;
+  /** Restrict the list to one wallet, or undefined for all wallets. */
+  walletId?: string;
 };
 
 /** Infinite-scrolling list of transactions grouped by day, bannered by month. */
-export function TransactionList({ header }: Props) {
-  const { sections, loading, done, loadMore } = usePaginatedTransactions();
+export function TransactionList({ header, walletId }: Props) {
+  const { sections, loading, done, loadMore } =
+    usePaginatedTransactions(walletId);
 
   return (
     <SectionList

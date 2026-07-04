@@ -1,25 +1,65 @@
+import { router, useFocusEffect } from "expo-router";
+import { Plus } from "lucide-react-native";
+import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AccountCard } from "@/components/home/account-card";
 import { TransactionList } from "@/components/home/transaction-list";
 import { Screen } from "@/components/ui/screen";
+import {
+  ALL_WALLETS,
+  WalletSelector,
+} from "@/components/ui/wallet-selector";
 import { Colors } from "@/constants/theme";
-import { router } from "expo-router";
-import { Plus } from "lucide-react-native";
+import { listWalletsWithBalances, type WalletWithBalance } from "@/db/queries";
 
 export default function HomeScreen() {
+  const [wallets, setWallets] = useState<WalletWithBalance[]>([]);
+  const [selected, setSelected] = useState<string>(ALL_WALLETS);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      listWalletsWithBalances().then((w) => {
+        if (!cancelled) setWallets(w);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [])
+  );
+
+  const walletFilter = selected === ALL_WALLETS ? undefined : selected;
+
+  function handleAdd() {
+    // Pre-select the current wallet in the new-transaction form.
+    router.push(
+      walletFilter
+        ? { pathname: "/add-transaction", params: { walletId: walletFilter } }
+        : "/add-transaction"
+    );
+  }
+
   return (
     <Screen>
-      <Pressable
-        onPress={() => router.push("/add-transaction")}
-        style={styles.fab}
-      >
-        <Plus color="black" />
+      <Pressable onPress={handleAdd} style={styles.fab}>
+        <Plus color={Colors.background} />
       </Pressable>
+
       <TransactionList
+        walletId={walletFilter}
         header={
           <View>
-            <AccountCard />
+            {wallets.length > 1 && (
+              <View style={styles.selectorWrap}>
+                <WalletSelector
+                  wallets={wallets}
+                  selected={selected}
+                  onSelect={setSelected}
+                />
+              </View>
+            )}
+            <AccountCard wallets={wallets} selectedWalletId={selected} />
             <Text style={styles.sectionTitle}>Transactions</Text>
           </View>
         }
@@ -29,6 +69,10 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  selectorWrap: {
+    marginHorizontal: -20,
+    marginTop: 4,
+  },
   sectionTitle: {
     color: Colors.text,
     fontSize: 18,

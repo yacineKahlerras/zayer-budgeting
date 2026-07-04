@@ -15,10 +15,14 @@ type PaginatedTransactions = {
 
 /**
  * Loads transactions page-by-page from the database and groups them into day
- * sections. Re-fetches the first page whenever the screen regains focus, so a
- * transaction added in the modal shows up on return.
+ * sections. Re-fetches the first page whenever the screen regains focus (so a
+ * transaction added in the modal shows up) or when the wallet filter changes.
+ *
+ * @param walletId Restrict to one wallet, or undefined for all wallets.
  */
-export function usePaginatedTransactions(): PaginatedTransactions {
+export function usePaginatedTransactions(
+  walletId?: string
+): PaginatedTransactions {
   const [items, setItems] = useState<TransactionListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -26,12 +30,12 @@ export function usePaginatedTransactions(): PaginatedTransactions {
 
   const sections = useMemo(() => groupByDay(items), [items]);
 
-  // Reload from scratch when the screen focuses.
+  // Reload from scratch when the screen focuses or the wallet filter changes.
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       (async () => {
-        const first = await getTransactionsPage(0, PAGE_SIZE);
+        const first = await getTransactionsPage(0, PAGE_SIZE, walletId);
         if (cancelled) return;
         setItems(first);
         pageRef.current = 0;
@@ -40,14 +44,14 @@ export function usePaginatedTransactions(): PaginatedTransactions {
       return () => {
         cancelled = true;
       };
-    }, [])
+    }, [walletId])
   );
 
   const loadMore = useCallback(async () => {
     if (loading || done) return;
     setLoading(true);
     const next = pageRef.current + 1;
-    const batch = await getTransactionsPage(next, PAGE_SIZE);
+    const batch = await getTransactionsPage(next, PAGE_SIZE, walletId);
     if (batch.length === 0) {
       setDone(true);
     } else {
@@ -56,7 +60,7 @@ export function usePaginatedTransactions(): PaginatedTransactions {
       if (batch.length < PAGE_SIZE) setDone(true);
     }
     setLoading(false);
-  }, [loading, done]);
+  }, [loading, done, walletId]);
 
   return { sections, loading, done, loadMore };
 }

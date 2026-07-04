@@ -3,7 +3,7 @@
  * writes SQL. All money is in MINOR UNITS (cents).
  */
 
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 
 import { db } from "./client";
 import {
@@ -77,6 +77,24 @@ export async function getWalletBalance(walletId: string): Promise<number> {
 export async function getTotalBalance(): Promise<number> {
   const all = await listWalletsWithBalances();
   return all.reduce((sum, w) => sum + w.balance, 0);
+}
+
+export type CurrencyBalance = { currency: string; balance: number };
+
+/**
+ * Balances grouped by currency. This is the correct way to show a combined
+ * total when wallets use different currencies — you can't sum USD and EUR, so
+ * we return one total per currency instead.
+ */
+export async function getBalancesByCurrency(): Promise<CurrencyBalance[]> {
+  const all = await listWalletsWithBalances();
+  const byCurrency = new Map<string, number>();
+  for (const w of all) {
+    byCurrency.set(w.currency, (byCurrency.get(w.currency) ?? 0) + w.balance);
+  }
+  return [...byCurrency.entries()]
+    .map(([currency, balance]) => ({ currency, balance }))
+    .sort((a, b) => a.currency.localeCompare(b.currency));
 }
 
 export type WalletInput = {
@@ -263,7 +281,8 @@ export type TransactionListItem = {
  */
 export async function getTransactionsPage(
   page: number,
-  pageSize: number
+  pageSize: number,
+  walletId?: string
 ): Promise<TransactionListItem[]> {
   const rows = await db
     .select({
@@ -281,6 +300,7 @@ export async function getTransactionsPage(
       eq(transactions.subcategoryId, subcategories.id)
     )
     .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+    .where(walletId ? eq(transactions.walletId, walletId) : undefined)
     .orderBy(desc(transactions.date), desc(transactions.createdAt))
     .limit(pageSize)
     .offset(page * pageSize);
@@ -293,4 +313,159 @@ export async function getTransactionsPage(
     categoryName: r.catName ?? "Uncategorized",
     date: r.date,
   }));
+}
+
+/* --------------------------------- Stats --------------------------------- */
+/*
+ * Stats are scoped to a single wallet (walletId) so all amounts share one
+ * currency — summing across differing currencies would be meaningless. The
+ * Stats screen picks a wallet; "all wallets" is offered only per-currency.
+ */
+
+/** Build a [start, end) date window from a period + an anchor date. */
+export function periodRange(
+  period: "week" | "month" | "year",
+  anchor: Date
+): { start: Date; end: Date } {
+  const y = anchor.getFullYear();
+  const m = anchor.getMonth();
+  const d = anchor.getDate();
+  if (period === "year") {
+    return { start: new Date(y, 0, 1), end: new Date(y + 1, 0, 1) };
+  }
+  if (period === "week") {
+    // week starts Monday
+    const day = anchor.getDay(); // 0=Sun..6=Sat
+    const diffToMonday = (day + 6) % 7;
+    const start = new Date(y, m, d - diffToMonday);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 7);
+    return { start, end };
+  }
+  return { start: new Date(y, m, 1), end: new Date(y, m + 1, 1) };
+}
+
+/** Combine an optional wallet filter with a date window into one WHERE clause. */
+function scopeWhere(walletId: string, start: Date, end: Date) {
+  return and(
+    eq(transactions.walletId, walletId),
+    gte(transactions.date, start),
+    lt(transactions.date, end)
+  );
+}
+
+export type PeriodSummary = {
+  income: number; // cents
+  expense: number; // cents
+  net: number; // income - expense
+};
+
+/** Income / expense / net for one wallet within a date window. */
+export async function getPeriodSummary(
+  walletId: string,
+  start: Date,
+  end: Date
+): Promise<PeriodSummary> {
+  const [row] = await db
+    .select({
+      income: sql<number>`coalesce(sum(case when ${transactions.direction} = 'income' then ${transactions.amount} else 0 end), 0)`,
+      expense: sql<number>`coalesce(sum(case when ${transactions.direction} = 'expense' then ${transactions.amount} else 0 end), 0)`,
+    })
+    .from(transactions)
+    .where(scopeWhere(walletId, start, end));
+
+  const income = row?.income ?? 0;
+  const expense = row?.expense ?? 0;
+  return { income, expense, net: income - expense };
+}
+
+export type CategorySlice = {
+  categoryId: string;
+  categoryName: string;
+  icon: string | null;
+  amount: number; // cents spent (expense)
+};
+
+/**
+ * Expense totals grouped by top-level category for one wallet + window,
+ * largest first. Uncategorized spending is folded into an "Uncategorized" slice.
+ */
+export async function getCategoryBreakdown(
+  walletId: string,
+  start: Date,
+  end: Date
+): Promise<CategorySlice[]> {
+  const rows = await db
+    .select({
+      categoryId: categories.id,
+      categoryName: categories.name,
+      icon: categories.icon,
+      amount: sql<number>`coalesce(sum(${transactions.amount}), 0)`,
+    })
+    .from(transactions)
+    .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
+    .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+    .where(
+      and(scopeWhere(walletId, start, end), eq(transactions.direction, "expense"))
+    )
+    .groupBy(categories.id);
+
+  return rows
+    .map((r) => ({
+      categoryId: r.categoryId ?? "uncategorized",
+      categoryName: r.categoryName ?? "Uncategorized",
+      icon: r.icon,
+      amount: r.amount,
+    }))
+    .filter((s) => s.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+}
+
+export type MonthlyTotal = {
+  year: number;
+  month: number; // 0-based
+  income: number;
+  expense: number;
+};
+
+/**
+ * Income/expense per month for one wallet over the last `months` months
+ * (oldest first), for the trend chart.
+ */
+export async function getMonthlyTotals(
+  walletId: string,
+  months: number,
+  anchor: Date
+): Promise<MonthlyTotal[]> {
+  const start = new Date(anchor.getFullYear(), anchor.getMonth() - (months - 1), 1);
+  const end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1);
+
+  const rows = await db
+    .select({
+      amount: transactions.amount,
+      direction: transactions.direction,
+      date: transactions.date,
+    })
+    .from(transactions)
+    .where(scopeWhere(walletId, start, end));
+
+  // Bucket into months in JS (SQLite date math on ms-epoch is awkward).
+  const buckets = new Map<string, MonthlyTotal>();
+  for (let i = 0; i < months; i++) {
+    const dt = new Date(anchor.getFullYear(), anchor.getMonth() - (months - 1) + i, 1);
+    buckets.set(`${dt.getFullYear()}-${dt.getMonth()}`, {
+      year: dt.getFullYear(),
+      month: dt.getMonth(),
+      income: 0,
+      expense: 0,
+    });
+  }
+  for (const r of rows) {
+    const key = `${r.date.getFullYear()}-${r.date.getMonth()}`;
+    const b = buckets.get(key);
+    if (!b) continue;
+    if (r.direction === "income") b.income += r.amount;
+    else b.expense += r.amount;
+  }
+  return [...buckets.values()];
 }
