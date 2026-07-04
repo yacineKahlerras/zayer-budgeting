@@ -21,7 +21,11 @@ export default function HomeScreen() {
     useCallback(() => {
       let cancelled = false;
       listWalletsWithBalances().then((w) => {
-        if (!cancelled) setWallets(w);
+        if (cancelled) return;
+        setWallets(w);
+        // With a single wallet there's no "All" vs "one" distinction — scope to
+        // that wallet so the card shows its name/currency, not "Total balance".
+        if (w.length === 1) setSelected(w[0].id);
       });
       return () => {
         cancelled = true;

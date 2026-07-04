@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { Screen, ScreenTitle } from "@/components/ui/screen";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   ALL_WALLETS,
   WalletSelector,
@@ -28,33 +29,47 @@ import {
   type WalletWithBalance,
 } from "@/db/queries";
 import { categoryIcon } from "@/utils/category-icon";
-import { formatCents } from "@/utils/format";
+import { formatCents, monthShort } from "@/utils/format";
 
 type Period = "week" | "month" | "year";
-const PERIODS: Period[] = ["week", "month", "year"];
-
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+const PERIOD_OPTIONS = [
+  { value: "week" as const, label: "Week" },
+  { value: "month" as const, label: "Month" },
+  { value: "year" as const, label: "Year" },
 ];
 
 function rangeLabel(period: Period, anchor: Date): string {
   if (period === "year") return `${anchor.getFullYear()}`;
   if (period === "month") {
-    return `${MONTHS[anchor.getMonth()]} ${anchor.getFullYear()}`;
+    return `${monthShort(anchor.getMonth())} ${anchor.getFullYear()}`;
   }
   const { start, end } = periodRange("week", anchor);
   const endInclusive = new Date(end);
   endInclusive.setDate(end.getDate() - 1);
-  return `${MONTHS[start.getMonth()]} ${start.getDate()} – ${MONTHS[endInclusive.getMonth()]} ${endInclusive.getDate()}`;
+  return `${monthShort(start.getMonth())} ${start.getDate()} – ${monthShort(endInclusive.getMonth())} ${endInclusive.getDate()}`;
 }
 
+/**
+ * Move the anchor one period. Anchors to day 1 (or week start) before stepping
+ * so month/year navigation never skips a short month (e.g. Jan 31 → Feb).
+ */
 function shiftAnchor(period: Period, anchor: Date, dir: -1 | 1): Date {
-  const d = new Date(anchor);
-  if (period === "week") d.setDate(d.getDate() + dir * 7);
-  else if (period === "month") d.setMonth(d.getMonth() + dir);
-  else d.setFullYear(d.getFullYear() + dir);
-  return d;
+  if (period === "week") {
+    const d = new Date(anchor);
+    d.setDate(d.getDate() + dir * 7);
+    return d;
+  }
+  if (period === "month") {
+    return new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1);
+  }
+  return new Date(anchor.getFullYear() + dir, 0, 1);
+}
+
+/** True if stepping forward from `anchor` would land beyond the current period. */
+function canStepForward(period: Period, anchor: Date, now: Date): boolean {
+  const next = shiftAnchor(period, anchor, 1);
+  const { start } = periodRange(period, next);
+  return start <= now;
 }
 
 export default function StatsScreen() {
@@ -105,7 +120,8 @@ export default function StatsScreen() {
         const [s, b, m] = await Promise.all([
           getPeriodSummary(selectedWallet, start, end),
           getCategoryBreakdown(selectedWallet, start, end),
-          getMonthlyTotals(selectedWallet, 6, anchor),
+          // Trend is always the 6 months up to now, independent of navigation.
+          getMonthlyTotals(selectedWallet, 6, new Date()),
         ]);
         if (cancelled) return;
         setSummary(s);
@@ -163,25 +179,15 @@ export default function StatsScreen() {
       >
         {/* Period toggle */}
         <View style={styles.periodToggle}>
-          {PERIODS.map((p) => {
-            const active = p === period;
-            return (
-              <Pressable
-                key={p}
-                style={[styles.periodBtn, active && styles.periodBtnActive]}
-                onPress={() => setPeriod(p)}
-              >
-                <Text
-                  style={[
-                    styles.periodText,
-                    active && styles.periodTextActive,
-                  ]}
-                >
-                  {p[0].toUpperCase() + p.slice(1)}
-                </Text>
-              </Pressable>
-            );
-          })}
+          <SegmentedControl
+            options={PERIOD_OPTIONS}
+            value={period}
+            onChange={(p) => {
+              setPeriod(p);
+              // Snap back to the current period when switching granularity.
+              setAnchor(new Date());
+            }}
+          />
         </View>
 
         {/* Range stepper */}
@@ -195,9 +201,17 @@ export default function StatsScreen() {
           <Text style={styles.rangeLabel}>{rangeLabel(period, anchor)}</Text>
           <Pressable
             hitSlop={10}
+            disabled={!canStepForward(period, anchor, new Date())}
             onPress={() => setAnchor((a) => shiftAnchor(period, a, 1))}
           >
-            <ChevronRight size={22} color={Colors.textMuted} />
+            <ChevronRight
+              size={22}
+              color={
+                canStepForward(period, anchor, new Date())
+                  ? Colors.textMuted
+                  : Colors.border
+              }
+            />
           </Pressable>
         </View>
 
@@ -302,7 +316,7 @@ export default function StatsScreen() {
                       ]}
                     />
                   </View>
-                  <Text style={styles.trendLabel}>{MONTHS[m.month]}</Text>
+                  <Text style={styles.trendLabel}>{monthShort(m.month)}</Text>
                 </View>
               ))}
             </View>
@@ -341,28 +355,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   periodToggle: {
-    flexDirection: "row",
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 10,
-    overflow: "hidden",
     marginTop: 12,
-  },
-  periodBtn: {
-    flex: 1,
-    paddingVertical: 9,
-    alignItems: "center",
-  },
-  periodBtnActive: {
-    backgroundColor: Colors.card,
-  },
-  periodText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.textMuted,
-  },
-  periodTextActive: {
-    color: Colors.text,
   },
   stepper: {
     flexDirection: "row",

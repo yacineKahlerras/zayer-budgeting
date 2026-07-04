@@ -1,9 +1,9 @@
 import { StyleSheet, Text, View } from "react-native";
 
+import { ALL_WALLETS } from "@/components/ui/wallet-selector";
 import { Colors } from "@/constants/theme";
 import type { WalletWithBalance } from "@/db/queries";
-import { ALL_WALLETS } from "@/components/ui/wallet-selector";
-import { formatCents } from "@/utils/format";
+import { balancesByCurrency, formatCents } from "@/utils/format";
 
 /**
  * Balance card. When a single wallet is selected it shows that wallet's balance;
@@ -20,14 +20,8 @@ export function AccountCard({
   const isAll = selectedWalletId === ALL_WALLETS;
   const selected = wallets.find((w) => w.id === selectedWalletId);
 
-  // Group by currency for the "All" view.
-  const byCurrency = new Map<string, number>();
-  for (const w of wallets) {
-    byCurrency.set(w.currency, (byCurrency.get(w.currency) ?? 0) + w.balance);
-  }
-  const currencyTotals = [...byCurrency.entries()].sort((a, b) =>
-    a[0].localeCompare(b[0])
-  );
+  // Group by currency for the "All" view (can't sum mixed currencies).
+  const currencyTotals = balancesByCurrency(wallets);
   const primary = isAll ? currencyTotals[0] : null;
 
   return (
@@ -39,13 +33,15 @@ export function AccountCard({
       {isAll ? (
         <>
           <Text style={styles.balance}>
-            {primary ? formatCents(primary[1], primary[0]) : formatCents(0)}
+            {primary
+              ? formatCents(primary.balance, primary.currency)
+              : formatCents(0)}
           </Text>
           {currencyTotals.length > 1 ? (
             <View style={styles.otherCurrencies}>
-              {currencyTotals.slice(1).map(([currency, amount]) => (
-                <Text key={currency} style={styles.otherLine}>
-                  {formatCents(amount, currency)}
+              {currencyTotals.slice(1).map((c) => (
+                <Text key={c.currency} style={styles.otherLine}>
+                  {formatCents(c.balance, c.currency)}
                 </Text>
               ))}
             </View>

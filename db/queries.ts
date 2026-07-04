@@ -67,35 +67,6 @@ export async function listWalletsWithBalances(): Promise<WalletWithBalance[]> {
   }));
 }
 
-/** Derived balance for a single wallet (cents). */
-export async function getWalletBalance(walletId: string): Promise<number> {
-  const all = await listWalletsWithBalances();
-  return all.find((w) => w.id === walletId)?.balance ?? 0;
-}
-
-/** Total balance across all wallets (naive: ignores differing currencies). */
-export async function getTotalBalance(): Promise<number> {
-  const all = await listWalletsWithBalances();
-  return all.reduce((sum, w) => sum + w.balance, 0);
-}
-
-export type CurrencyBalance = { currency: string; balance: number };
-
-/**
- * Balances grouped by currency. This is the correct way to show a combined
- * total when wallets use different currencies — you can't sum USD and EUR, so
- * we return one total per currency instead.
- */
-export async function getBalancesByCurrency(): Promise<CurrencyBalance[]> {
-  const all = await listWalletsWithBalances();
-  const byCurrency = new Map<string, number>();
-  for (const w of all) {
-    byCurrency.set(w.currency, (byCurrency.get(w.currency) ?? 0) + w.balance);
-  }
-  return [...byCurrency.entries()]
-    .map(([currency, balance]) => ({ currency, balance }))
-    .sort((a, b) => a.currency.localeCompare(b.currency));
-}
 
 export type WalletInput = {
   name: string;

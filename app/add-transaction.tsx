@@ -17,8 +17,10 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Chip } from "@/components/ui/chip";
 import { DeleteRow } from "@/components/ui/delete-row";
 import { ModalHeader } from "@/components/ui/modal-header";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Colors } from "@/constants/theme";
 import {
   addTransaction,
@@ -31,7 +33,7 @@ import {
 } from "@/db/queries";
 import type { Wallet } from "@/db/schema";
 import { categoryIcon } from "@/utils/category-icon";
-import { currencySymbol, toCents } from "@/utils/format";
+import { currencySymbol, monthShort, toCents } from "@/utils/format";
 
 // Enable LayoutAnimation on Android.
 if (
@@ -43,9 +45,9 @@ if (
 
 type Direction = "expense" | "income";
 
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+const DIRECTION_OPTIONS = [
+  { value: "expense" as const, label: "Expense" },
+  { value: "income" as const, label: "Income" },
 ];
 
 function isSameDay(a: Date, b: Date) {
@@ -57,7 +59,7 @@ function isSameDay(a: Date, b: Date) {
 }
 
 function formatDate(d: Date) {
-  const label = `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  const label = `${monthShort(d.getMonth())} ${d.getDate()}`;
   return isSameDay(d, new Date()) ? `Today · ${label}` : label;
 }
 
@@ -115,6 +117,11 @@ export default function AddTransaction() {
     };
   }, [direction]);
 
+  // The edited transaction's wallet id, captured during prefill so we can map
+  // it to an index once wallets load — without a second DB read, and without
+  // re-applying it later (which would clobber a manual wallet change).
+  const pendingWalletId = useRef<string | null>(null);
+
   // In edit mode, load the transaction once and prefill the form. Setting
   // `direction` here re-runs the category effect but does NOT clear the
   // category, because the reset only happens in the toggle handler below.
@@ -130,21 +137,20 @@ export default function AddTransaction() {
       setMemo(tx.note ?? "");
       setDate(tx.date);
       if (tx.note || tx.title) setExpanded(true);
+      pendingWalletId.current = tx.walletId;
     });
     return () => {
       cancelled = true;
     };
   }, [id]);
 
-  // Once wallets are loaded (or change), select the edited transaction's wallet.
+  // Apply the pending wallet selection exactly once, when wallets are ready.
   useEffect(() => {
-    if (!id || wallets.length === 0) return;
-    getTransaction(id).then((tx) => {
-      if (!tx) return;
-      const wi = wallets.findIndex((x) => x.id === tx.walletId);
-      if (wi >= 0) setWalletIndex(wi);
-    });
-  }, [id, wallets]);
+    if (!pendingWalletId.current || wallets.length === 0) return;
+    const wi = wallets.findIndex((x) => x.id === pendingWalletId.current);
+    if (wi >= 0) setWalletIndex(wi);
+    pendingWalletId.current = null; // consume it — never re-apply
+  }, [wallets]);
 
   /** Switch direction AND clear the (now-invalid) category selection. Only the
    *  user's toggle triggers this — prefilling direction must not clear it. */
@@ -240,8 +246,6 @@ export default function AddTransaction() {
     );
   }
 
-  const isIncome = direction === "income";
-
   if (loading) {
     return (
       <SafeAreaView style={[styles.safe, styles.center]} edges={["top"]}>
@@ -268,26 +272,11 @@ export default function AddTransaction() {
       >
         {/* Direction toggle */}
         <View style={styles.toggle}>
-          <Pressable
-            style={[styles.toggleBtn, !isIncome && styles.toggleBtnActive]}
-            onPress={() => selectDirection("expense")}
-          >
-            <Text
-              style={[styles.toggleText, !isIncome && styles.toggleTextActive]}
-            >
-              Expense
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.toggleBtn, isIncome && styles.toggleBtnActive]}
-            onPress={() => selectDirection("income")}
-          >
-            <Text
-              style={[styles.toggleText, isIncome && styles.toggleTextActive]}
-            >
-              Income
-            </Text>
-          </Pressable>
+          <SegmentedControl
+            options={DIRECTION_OPTIONS}
+            value={direction}
+            onChange={selectDirection}
+          />
         </View>
 
         {/* Amount — real visible input so the keyboard reliably appears */}
@@ -379,25 +368,14 @@ export default function AddTransaction() {
                 {/* Subcategory chips */}
                 {isOpen && (
                   <View style={styles.subWrap}>
-                    {c.subs.map((s) => {
-                      const selected = s.id === subcategoryId;
-                      return (
-                        <Pressable
-                          key={s.id}
-                          style={[styles.chip, selected && styles.chipSelected]}
-                          onPress={() => setSubcategoryId(s.id)}
-                        >
-                          <Text
-                            style={[
-                              styles.chipText,
-                              selected && styles.chipTextSelected,
-                            ]}
-                          >
-                            {s.name}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
+                    {c.subs.map((s) => (
+                      <Chip
+                        key={s.id}
+                        label={s.name}
+                        selected={s.id === subcategoryId}
+                        onPress={() => setSubcategoryId(s.id)}
+                      />
+                    ))}
                   </View>
                 )}
               </View>
@@ -491,28 +469,7 @@ const styles = StyleSheet.create({
   },
 
   toggle: {
-    flexDirection: "row",
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 10,
-    overflow: "hidden",
     marginBottom: 24,
-  },
-  toggleBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  toggleBtnActive: {
-    backgroundColor: Colors.card,
-  },
-  toggleText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.textMuted,
-  },
-  toggleTextActive: {
-    color: Colors.text,
   },
 
   amountBlock: {
@@ -630,26 +587,6 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingBottom: 14,
     paddingLeft: 47,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.card,
-  },
-  chipSelected: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.cardElevated,
-  },
-  chipText: {
-    fontSize: 13,
-    color: Colors.textMuted,
-    fontWeight: "500",
-  },
-  chipTextSelected: {
-    color: Colors.text,
   },
 
   moreRow: {

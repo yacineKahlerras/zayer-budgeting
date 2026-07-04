@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -12,6 +11,7 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Chip } from "@/components/ui/chip";
 import { DeleteRow } from "@/components/ui/delete-row";
 import { ModalHeader } from "@/components/ui/modal-header";
 import { Colors } from "@/constants/theme";
@@ -141,25 +141,14 @@ export default function EditWallet() {
         <View style={styles.field}>
           <Text style={styles.label}>Currency</Text>
           <View style={styles.chips}>
-            {CURRENCIES.map((c) => {
-              const selected = c === currency;
-              return (
-                <Pressable
-                  key={c}
-                  style={[styles.chip, selected && styles.chipSelected]}
-                  onPress={() => setCurrency(c)}
-                >
-                  <Text
-                    style={[
-                      styles.chipText,
-                      selected && styles.chipTextSelected,
-                    ]}
-                  >
-                    {c}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            {CURRENCIES.map((c) => (
+              <Chip
+                key={c}
+                label={c}
+                selected={c === currency}
+                onPress={() => setCurrency(c)}
+              />
+            ))}
           </View>
         </View>
 
@@ -233,25 +222,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-  },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.card,
-  },
-  chipSelected: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.cardElevated,
-  },
-  chipText: {
-    fontSize: 13,
-    color: Colors.textMuted,
-    fontWeight: "600",
-  },
-  chipTextSelected: {
-    color: Colors.text,
   },
 });
