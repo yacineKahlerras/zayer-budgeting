@@ -1,6 +1,7 @@
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -29,6 +30,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
+      <KeyboardProvider>
       <ThemeProvider value={navTheme}>
         {error ? (
           <View style={styles.center}>
@@ -51,10 +53,15 @@ export default function RootLayout() {
               name="add-transaction"
               options={{ presentation: "modal", headerShown: false }}
             />
+            <Stack.Screen
+              name="edit-wallet"
+              options={{ presentation: "modal", headerShown: false }}
+            />
           </Stack>
         )}
         <StatusBar style="light" />
       </ThemeProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

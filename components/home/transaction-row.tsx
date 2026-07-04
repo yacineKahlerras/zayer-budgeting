@@ -1,15 +1,21 @@
+import { router } from "expo-router";
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react-native";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
 import type { TransactionListItem } from "@/db/queries";
 import { formatCents } from "@/utils/format";
 
-/** A single transaction line: direction icon, title/category, signed amount. */
+/** A single transaction line. Tapping it opens the transaction for editing. */
 export function TransactionRow({ item }: { item: TransactionListItem }) {
   const isIncome = item.amount >= 0;
   return (
-    <View style={styles.row}>
+    <Pressable
+      style={styles.row}
+      onPress={() =>
+        router.push({ pathname: "/add-transaction", params: { id: item.id } })
+      }
+    >
       <View style={styles.iconCircle}>
         {isIncome ? (
           <ArrowDownLeft size={20} color={Colors.positive} />
@@ -30,7 +36,7 @@ export function TransactionRow({ item }: { item: TransactionListItem }) {
         {isIncome ? "+" : "-"}
         {formatCents(item.amount)}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 

@@ -1,6 +1,6 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { router } from "expo-router";
-import { Calendar, Check, ChevronDown, ChevronRight, X } from "lucide-react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { Calendar, ChevronDown, ChevronRight } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -8,24 +8,30 @@ import {
   LayoutAnimation,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   UIManager,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { DeleteRow } from "@/components/ui/delete-row";
+import { ModalHeader } from "@/components/ui/modal-header";
 import { Colors } from "@/constants/theme";
 import {
   addTransaction,
+  deleteTransaction,
+  getTransaction,
   listCategoryTree,
   listWallets,
+  updateTransaction,
   type CategoryWithSubs,
 } from "@/db/queries";
 import type { Wallet } from "@/db/schema";
 import { categoryIcon } from "@/utils/category-icon";
+import { currencySymbol, toCents } from "@/utils/format";
 
 // Enable LayoutAnimation on Android.
 if (
@@ -55,14 +61,10 @@ function formatDate(d: Date) {
   return isSameDay(d, new Date()) ? `Today · ${label}` : label;
 }
 
-/** Convert a "24.50" style string to integer cents. */
-function toCents(input: string): number {
-  const n = parseFloat(input);
-  if (!n || n <= 0) return 0;
-  return Math.round(n * 100);
-}
-
 export default function AddTransaction() {
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const editing = !!id;
+
   const [direction, setDirection] = useState<Direction>("expense");
   const [amount, setAmount] = useState("");
   const [wallets, setWallets] = useState<Wallet[]>([]);
@@ -80,33 +82,71 @@ export default function AddTransaction() {
 
   const amountInputRef = useRef<TextInput>(null);
 
-  // Load wallets + categories for the selected direction.
+  // Load wallets once — they don't depend on direction.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const [w, t] = await Promise.all([
-        listWallets(),
-        listCategoryTree(direction),
-      ]);
+    listWallets().then((w) => {
+      if (!cancelled) setWallets(w);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Load the category tree for the current direction.
+  useEffect(() => {
+    let cancelled = false;
+    listCategoryTree(direction).then((t) => {
       if (cancelled) return;
-      setWallets(w);
       setTree(t);
       setLoading(false);
-    })();
+    });
     return () => {
       cancelled = true;
     };
   }, [direction]);
 
-  // Reset category selection when direction changes (income/expense have
-  // different category sets).
+  // In edit mode, load the transaction once and prefill the form. Setting
+  // `direction` here re-runs the category effect but does NOT clear the
+  // category, because the reset only happens in the toggle handler below.
   useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    getTransaction(id).then((tx) => {
+      if (cancelled || !tx) return;
+      setDirection(tx.direction);
+      setAmount((tx.amount / 100).toFixed(2));
+      setSubcategoryId(tx.subcategoryId);
+      setTitle(tx.title ?? "");
+      setMemo(tx.note ?? "");
+      setDate(tx.date);
+      if (tx.note || tx.title) setExpanded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  // Once wallets are loaded (or change), select the edited transaction's wallet.
+  useEffect(() => {
+    if (!id || wallets.length === 0) return;
+    getTransaction(id).then((tx) => {
+      if (!tx) return;
+      const wi = wallets.findIndex((x) => x.id === tx.walletId);
+      if (wi >= 0) setWalletIndex(wi);
+    });
+  }, [id, wallets]);
+
+  /** Switch direction AND clear the (now-invalid) category selection. Only the
+   *  user's toggle triggers this — prefilling direction must not clear it. */
+  function selectDirection(next: Direction) {
+    if (next === direction) return;
+    setDirection(next);
     setOpenCategoryId(null);
     setSubcategoryId(null);
-  }, [direction]);
+  }
 
   const wallet = wallets[walletIndex] ?? null;
-  const amountDisplay = amount === "" ? "0.00" : amount;
 
   const selectedSub = useMemo(() => {
     for (const c of tree) {
@@ -121,9 +161,9 @@ export default function AddTransaction() {
     setExpanded((v) => !v);
   }
 
-  function toggleCategory(id: string) {
+  function toggleCategory(catId: string) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setOpenCategoryId((cur) => (cur === id ? null : id));
+    setOpenCategoryId((cur) => (cur === catId ? null : catId));
   }
 
   function cycleWallet() {
@@ -132,35 +172,63 @@ export default function AddTransaction() {
   }
 
   async function handleSave() {
-    const cents = toCents(amountDisplay);
+    const cents = toCents(amount);
     if (cents <= 0) {
       Alert.alert("Enter an amount", "The amount must be greater than zero.");
-      return;
-    }
-    if (!subcategoryId) {
-      Alert.alert("Pick a category", "Choose a category for this transaction.");
       return;
     }
     if (!wallet) {
       Alert.alert("No wallet", "Add a wallet first.");
       return;
     }
+    // Category is optional. When absent, fall back to a title so the row still
+    // reads sensibly instead of "Uncategorized".
+    const fallbackTitle = direction === "income" ? "Income" : "Expense";
+    const payload = {
+      walletId: wallet.id,
+      subcategoryId: subcategoryId ?? null,
+      amount: cents,
+      direction,
+      title: title.trim() || (subcategoryId ? null : fallbackTitle),
+      note: memo.trim() || null,
+      date,
+    };
     setSaving(true);
     try {
-      await addTransaction({
-        walletId: wallet.id,
-        subcategoryId,
-        amount: cents,
-        direction,
-        title: title.trim() || null,
-        note: memo.trim() || null,
-        date,
-      });
+      if (editing && id) {
+        await updateTransaction(id, payload);
+      } else {
+        await addTransaction(payload);
+      }
       router.back();
     } catch (e) {
       setSaving(false);
       Alert.alert("Could not save", (e as Error).message);
     }
+  }
+
+  function handleDelete() {
+    if (!id) return;
+    Alert.alert(
+      "Delete transaction",
+      "This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteTransaction(id);
+              router.back();
+            } catch (e) {
+              Alert.alert("Could not delete", (e as Error).message);
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   }
 
   const isIncome = direction === "income";
@@ -175,39 +243,25 @@ export default function AddTransaction() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable
-          style={styles.iconBtn}
-          hitSlop={10}
-          onPress={() => router.back()}
-        >
-          <X size={22} color={Colors.text} />
-        </Pressable>
-        <Text style={styles.headerTitle}>New transaction</Text>
-        <Pressable
-          style={styles.iconBtn}
-          hitSlop={10}
-          onPress={handleSave}
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator size="small" color={Colors.accent} />
-          ) : (
-            <Check size={22} color={Colors.accent} />
-          )}
-        </Pressable>
-      </View>
+      <ModalHeader
+        title={editing ? "Edit transaction" : "New transaction"}
+        onCancel={() => router.back()}
+        onSave={handleSave}
+        saving={saving}
+      />
 
-      <ScrollView
+      <KeyboardAwareScrollView
+        style={styles.flex}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        bottomOffset={20}
       >
         {/* Direction toggle */}
         <View style={styles.toggle}>
           <Pressable
             style={[styles.toggleBtn, !isIncome && styles.toggleBtnActive]}
-            onPress={() => setDirection("expense")}
+            onPress={() => selectDirection("expense")}
           >
             <Text
               style={[styles.toggleText, !isIncome && styles.toggleTextActive]}
@@ -217,7 +271,7 @@ export default function AddTransaction() {
           </Pressable>
           <Pressable
             style={[styles.toggleBtn, isIncome && styles.toggleBtnActive]}
-            onPress={() => setDirection("income")}
+            onPress={() => selectDirection("income")}
           >
             <Text
               style={[styles.toggleText, isIncome && styles.toggleTextActive]}
@@ -227,27 +281,29 @@ export default function AddTransaction() {
           </Pressable>
         </View>
 
-        {/* Amount */}
+        {/* Amount — real visible input so the keyboard reliably appears */}
         <Pressable
           style={styles.amountBlock}
           onPress={() => amountInputRef.current?.focus()}
         >
           <Text style={styles.amountLabel}>Amount</Text>
-          <Text style={styles.amountValue}>
+          <View style={styles.amountRow}>
             <Text style={styles.amountCurrency}>
-              {wallet?.currency === "EUR" ? "€" : "$"}
+              {currencySymbol(wallet?.currency ?? "USD")}
             </Text>
-            {amountDisplay}
-          </Text>
-          <TextInput
-            ref={amountInputRef}
-            style={styles.hiddenInput}
-            value={amount}
-            onChangeText={(t) =>
-              setAmount(t.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1"))
-            }
-            keyboardType="decimal-pad"
-          />
+            <TextInput
+              ref={amountInputRef}
+              style={styles.amountInput}
+              value={amount}
+              onChangeText={(t) =>
+                setAmount(t.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1"))
+              }
+              keyboardType="decimal-pad"
+              placeholder="0.00"
+              placeholderTextColor={Colors.textMuted}
+              autoFocus
+            />
+          </View>
         </Pressable>
 
         {/* Wallet */}
@@ -262,7 +318,7 @@ export default function AddTransaction() {
         </Pressable>
 
         {/* Category → subcategory */}
-        <Text style={styles.sectionLabel}>Category</Text>
+        <Text style={styles.sectionLabel}>Category · optional</Text>
         <View style={styles.rows}>
           {tree.map((c, i) => {
             const Icon = categoryIcon(c.icon);
@@ -386,7 +442,11 @@ export default function AddTransaction() {
             </View>
           </View>
         )}
-      </ScrollView>
+
+        {editing && (
+          <DeleteRow label="Delete transaction" onPress={handleDelete} />
+        )}
+      </KeyboardAwareScrollView>
 
       {showDatePicker && (
         <DateTimePicker
@@ -409,31 +469,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  flex: {
+    flex: 1,
+  },
   center: {
     alignItems: "center",
     justifyContent: "center",
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  iconBtn: {
-    width: 38,
-    height: 38,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.textMuted,
-  },
   content: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
 
   toggle: {
@@ -471,23 +516,25 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     fontWeight: "600",
   },
-  amountValue: {
+  amountRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    marginTop: 4,
+  },
+  amountCurrency: {
+    fontSize: 32,
+    color: Colors.textMuted,
+    fontWeight: "500",
+    marginRight: 2,
+  },
+  amountInput: {
+    flex: 1,
     fontSize: 46,
     fontWeight: "700",
     letterSpacing: -0.5,
     color: Colors.text,
-    marginTop: 4,
+    padding: 0,
     fontVariant: ["tabular-nums"],
-  },
-  amountCurrency: {
-    color: Colors.textMuted,
-    fontWeight: "500",
-  },
-  hiddenInput: {
-    position: "absolute",
-    width: 1,
-    height: 1,
-    opacity: 0,
   },
 
   walletRow: {

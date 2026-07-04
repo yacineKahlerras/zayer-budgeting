@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { Edge, SafeAreaView } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/theme";

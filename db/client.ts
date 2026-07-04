@@ -19,6 +19,11 @@ export const sqliteDb = openDatabaseSync("budget.db", {
   enableChangeListener: true,
 });
 
+// SQLite defaults foreign-key enforcement OFF per connection. Turn it on so the
+// schema's ON DELETE CASCADE / SET NULL actually fire (e.g. deleting a wallet
+// deletes its transactions; deleting a subcategory nulls the reference).
+sqliteDb.execSync("PRAGMA foreign_keys = ON;");
+
 /**
  * The Drizzle instance. Passing `{ schema }` gives us the typed query API and
  * relational helpers. Import THIS in queries/seed, e.g.:
