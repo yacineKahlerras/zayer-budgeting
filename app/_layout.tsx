@@ -61,6 +61,22 @@ export default function RootLayout() {
               name="edit-budget"
               options={{ presentation: "modal", headerShown: false }}
             />
+            <Stack.Screen
+              name="settings"
+              options={{ presentation: "modal", headerShown: false }}
+            />
+            <Stack.Screen
+              name="categories"
+              options={{ presentation: "modal", headerShown: false }}
+            />
+            <Stack.Screen
+              name="edit-category"
+              options={{ presentation: "modal", headerShown: false }}
+            />
+            <Stack.Screen
+              name="search"
+              options={{ presentation: "modal", headerShown: false }}
+            />
           </Stack>
         )}
         <StatusBar style="light" />

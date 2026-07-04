@@ -3,7 +3,7 @@
  * writes SQL. All money is in MINOR UNITS (cents).
  */
 
-import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, like, lt, or, sql } from "drizzle-orm";
 
 import { db } from "./client";
 import {
@@ -555,4 +555,168 @@ export async function listBudgetsWithProgress(
       remaining: b.amount - spent,
     };
   });
+}
+
+/* ------------------------- Category management --------------------------- */
+
+export type CategoryInput = {
+  name: string;
+  kind: "expense" | "income";
+  icon: string | null;
+};
+
+export async function addCategory(input: CategoryInput): Promise<string> {
+  const id = newId("c");
+  const existing = await db.select().from(categories);
+  await db.insert(categories).values({
+    id,
+    name: input.name,
+    kind: input.kind,
+    icon: input.icon,
+    isDefault: false,
+    sortOrder: existing.length,
+  });
+  return id;
+}
+
+export async function updateCategory(
+  id: string,
+  input: Pick<CategoryInput, "name" | "icon">
+) {
+  await db
+    .update(categories)
+    .set({ name: input.name, icon: input.icon })
+    .where(eq(categories.id, id));
+}
+
+/**
+ * Delete a category and its subcategories (cascade). Transactions that used a
+ * deleted subcategory keep their history with a null category (SET NULL).
+ */
+export async function deleteCategory(id: string) {
+  await db.delete(categories).where(eq(categories.id, id));
+}
+
+export async function addSubcategory(
+  categoryId: string,
+  name: string
+): Promise<string> {
+  const id = newId("s");
+  const existing = await db
+    .select()
+    .from(subcategories)
+    .where(eq(subcategories.categoryId, categoryId));
+  await db.insert(subcategories).values({
+    id,
+    categoryId,
+    name,
+    isDefault: false,
+    sortOrder: existing.length,
+  });
+  return id;
+}
+
+export async function updateSubcategory(id: string, name: string) {
+  await db.update(subcategories).set({ name }).where(eq(subcategories.id, id));
+}
+
+export async function deleteSubcategory(id: string) {
+  await db.delete(subcategories).where(eq(subcategories.id, id));
+}
+
+/* --------------------------------- Export -------------------------------- */
+
+export type ExportRow = {
+  date: Date;
+  wallet: string;
+  currency: string;
+  direction: "expense" | "income";
+  amount: number; // cents
+  category: string;
+  subcategory: string;
+  title: string;
+  note: string;
+};
+
+/** Every transaction with full context, newest first, for CSV export. */
+export async function getAllTransactionsForExport(): Promise<ExportRow[]> {
+  const rows = await db
+    .select({
+      date: transactions.date,
+      wallet: wallets.name,
+      currency: wallets.currency,
+      direction: transactions.direction,
+      amount: transactions.amount,
+      catName: categories.name,
+      subName: subcategories.name,
+      title: transactions.title,
+      note: transactions.note,
+    })
+    .from(transactions)
+    .innerJoin(wallets, eq(transactions.walletId, wallets.id))
+    .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
+    .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+    .orderBy(desc(transactions.date), desc(transactions.createdAt));
+
+  return rows.map((r) => ({
+    date: r.date,
+    wallet: r.wallet,
+    currency: r.currency,
+    direction: r.direction,
+    amount: r.amount,
+    category: r.catName ?? "",
+    subcategory: r.subName ?? "",
+    title: r.title ?? "",
+    note: r.note ?? "",
+  }));
+}
+
+/* --------------------------------- Search -------------------------------- */
+
+/**
+ * Search transactions by title or note text (case-insensitive), newest first,
+ * paginated. An empty query returns the normal recent list.
+ */
+export async function searchTransactions(
+  query: string,
+  page: number,
+  pageSize: number
+): Promise<TransactionListItem[]> {
+  const q = query.trim();
+  const term = `%${q.replace(/[%_]/g, "")}%`;
+
+  const rows = await db
+    .select({
+      id: transactions.id,
+      amount: transactions.amount,
+      direction: transactions.direction,
+      title: transactions.title,
+      subName: subcategories.name,
+      catName: categories.name,
+      date: transactions.date,
+    })
+    .from(transactions)
+    .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
+    .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+    .where(
+      q
+        ? or(
+            like(transactions.title, term),
+            like(transactions.note, term),
+            like(subcategories.name, term),
+            like(categories.name, term)
+          )
+        : undefined
+    )
+    .orderBy(desc(transactions.date), desc(transactions.createdAt))
+    .limit(pageSize)
+    .offset(page * pageSize);
+
+  return rows.map((r) => ({
+    id: r.id,
+    amount: r.direction === "expense" ? -r.amount : r.amount,
+    title: r.title ?? r.subName ?? "Uncategorized",
+    categoryName: r.catName ?? "Uncategorized",
+    date: r.date,
+  }));
 }

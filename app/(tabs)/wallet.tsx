@@ -1,5 +1,5 @@
 import { useFocusEffect, router } from "expo-router";
-import { Plus, Wallet as WalletIcon } from "lucide-react-native";
+import { Plus, Settings, Wallet as WalletIcon } from "lucide-react-native";
 import { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -27,13 +27,22 @@ export default function WalletScreen() {
     <Screen>
       <View style={styles.header}>
         <ScreenTitle>Wallets</ScreenTitle>
-        <Pressable
-          style={styles.addBtn}
-          hitSlop={10}
-          onPress={() => router.push("/edit-wallet")}
-        >
-          <Plus size={22} color={Colors.text} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            style={styles.addBtn}
+            hitSlop={10}
+            onPress={() => router.push("/settings")}
+          >
+            <Settings size={20} color={Colors.textMuted} />
+          </Pressable>
+          <Pressable
+            style={styles.addBtn}
+            hitSlop={10}
+            onPress={() => router.push("/edit-wallet")}
+          >
+            <Plus size={22} color={Colors.text} />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -90,6 +99,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
+  },
+  headerActions: {
+    flexDirection: "row",
+    gap: 8,
   },
   addBtn: {
     width: 38,

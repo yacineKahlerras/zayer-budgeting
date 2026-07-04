@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from "expo-router";
-import { Plus } from "lucide-react-native";
+import { Plus, Search } from "lucide-react-native";
 import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -64,7 +64,15 @@ export default function HomeScreen() {
               </View>
             )}
             <AccountCard wallets={wallets} selectedWalletId={selected} />
-            <Text style={styles.sectionTitle}>Transactions</Text>
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionTitle}>Transactions</Text>
+              <Pressable
+                hitSlop={10}
+                onPress={() => router.push("/search")}
+              >
+                <Search size={20} color={Colors.textMuted} />
+              </Pressable>
+            </View>
           </View>
         }
       />
@@ -77,11 +85,16 @@ const styles = StyleSheet.create({
     marginHorizontal: -20,
     marginTop: 4,
   },
+  sectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
   sectionTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 4,
   },
   fab: {
     position: "absolute",
