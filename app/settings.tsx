@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import {
   ChevronRight,
   Download,
+  FlaskConical,
   Tags,
   X,
   type LucideIcon,
@@ -11,10 +12,12 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/theme";
+import { insertSampleData } from "@/db/sample-data";
 import { exportAllToCsv } from "@/utils/export";
 
 export default function SettingsScreen() {
   const [exporting, setExporting] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
   async function handleExport() {
     setExporting(true);
@@ -24,6 +27,18 @@ export default function SettingsScreen() {
       Alert.alert("Export failed", (e as Error).message);
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleSampleData() {
+    setSeeding(true);
+    try {
+      const n = await insertSampleData();
+      Alert.alert("Sample data added", `${n} transactions created.`);
+    } catch (e) {
+      Alert.alert("Could not add sample data", (e as Error).message);
+    } finally {
+      setSeeding(false);
     }
   }
 
@@ -50,8 +65,17 @@ export default function SettingsScreen() {
             label={exporting ? "Exporting…" : "Export data (CSV)"}
             hint="Share all your transactions"
             onPress={handleExport}
-            last
+            last={!__DEV__}
           />
+          {__DEV__ && (
+            <Row
+              icon={FlaskConical}
+              label={seeding ? "Adding…" : "Insert sample data (dev)"}
+              hint="A few months of demo transactions"
+              onPress={handleSampleData}
+              last
+            />
+          )}
         </View>
 
         <Text style={styles.version}>Zayer Budgeting</Text>

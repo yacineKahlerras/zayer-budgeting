@@ -6,16 +6,12 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AccountCard } from "@/components/home/account-card";
 import { TransactionList } from "@/components/home/transaction-list";
 import { Screen } from "@/components/ui/screen";
-import {
-  ALL_WALLETS,
-  WalletSelector,
-} from "@/components/ui/wallet-selector";
 import { Colors } from "@/constants/theme";
 import { listWalletsWithBalances, type WalletWithBalance } from "@/db/queries";
 
 export default function HomeScreen() {
   const [wallets, setWallets] = useState<WalletWithBalance[]>([]);
-  const [selected, setSelected] = useState<string>(ALL_WALLETS);
+  const [selected, setSelected] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -23,9 +19,10 @@ export default function HomeScreen() {
       listWalletsWithBalances().then((w) => {
         if (cancelled) return;
         setWallets(w);
-        // With a single wallet there's no "All" vs "one" distinction — scope to
-        // that wallet so the card shows its name/currency, not "Total balance".
-        if (w.length === 1) setSelected(w[0].id);
+        // Keep the current selection if it still exists; else the first wallet.
+        setSelected((cur) =>
+          cur && w.some((x) => x.id === cur) ? cur : w[0]?.id ?? null
+        );
       });
       return () => {
         cancelled = true;
@@ -33,13 +30,10 @@ export default function HomeScreen() {
     }, [])
   );
 
-  const walletFilter = selected === ALL_WALLETS ? undefined : selected;
-
   function handleAdd() {
-    // Pre-select the current wallet in the new-transaction form.
     router.push(
-      walletFilter
-        ? { pathname: "/add-transaction", params: { walletId: walletFilter } }
+      selected
+        ? { pathname: "/add-transaction", params: { walletId: selected } }
         : "/add-transaction"
     );
   }
@@ -51,7 +45,7 @@ export default function HomeScreen() {
       </Pressable>
 
       <TransactionList
-        walletId={walletFilter}
+        walletId={selected ?? undefined}
         header={
           <View>
             <View style={styles.topBar}>
@@ -65,16 +59,11 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
             </View>
-            {wallets.length > 1 && (
-              <View style={styles.selectorWrap}>
-                <WalletSelector
-                  wallets={wallets}
-                  selected={selected}
-                  onSelect={setSelected}
-                />
-              </View>
-            )}
-            <AccountCard wallets={wallets} selectedWalletId={selected} />
+            <AccountCard
+              wallets={wallets}
+              selectedWalletId={selected}
+              onSelect={setSelected}
+            />
             <Text style={styles.sectionTitle}>Transactions</Text>
           </View>
         }
@@ -101,10 +90,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 18,
-  },
-  selectorWrap: {
-    marginHorizontal: -20,
-    marginTop: 8,
   },
   sectionTitle: {
     color: Colors.text,

@@ -160,6 +160,8 @@ export async function listCategoryTree(
 
 export type NewTransactionInput = {
   walletId: string;
+  /** Top-level category — valid on its own, without a subcategory. */
+  categoryId: string | null;
   subcategoryId: string | null;
   amount: number; // cents, positive
   direction: "expense" | "income";
@@ -181,6 +183,7 @@ export async function addTransaction(input: NewTransactionInput) {
   await db.insert(transactions).values({
     id,
     walletId: input.walletId,
+    categoryId: input.categoryId,
     subcategoryId: input.subcategoryId,
     amount: input.amount,
     direction: input.direction,
@@ -199,6 +202,7 @@ export async function updateTransaction(
     .update(transactions)
     .set({
       walletId: input.walletId,
+      categoryId: input.categoryId,
       subcategoryId: input.subcategoryId,
       amount: input.amount,
       direction: input.direction,
@@ -217,6 +221,7 @@ export async function deleteTransaction(id: string) {
 export type TransactionDetail = {
   id: string;
   walletId: string;
+  categoryId: string | null;
   subcategoryId: string | null;
   amount: number; // positive cents
   direction: "expense" | "income";
@@ -236,6 +241,7 @@ export async function getTransaction(
   return {
     id: row.id,
     walletId: row.walletId,
+    categoryId: row.categoryId,
     subcategoryId: row.subcategoryId,
     amount: row.amount,
     direction: row.direction,
@@ -251,8 +257,42 @@ export type TransactionListItem = {
   amount: number; // signed cents: negative for expense
   title: string;
   categoryName: string;
+  note: string | null;
   date: Date;
 };
+
+/** Join categories on the transaction's EFFECTIVE category: the subcategory's
+ *  parent when a subcategory is set, else the transaction's own categoryId. */
+const effectiveCategoryJoin = () =>
+  sql`${categories.id} = coalesce(${subcategories.categoryId}, ${transactions.categoryId})`;
+
+/** Shared select + display-fallback mapping for transaction list rows. */
+function toListItem(r: {
+  id: string;
+  amount: number;
+  direction: "expense" | "income";
+  title: string | null;
+  subName: string | null;
+  catName: string | null;
+  note: string | null;
+  date: Date;
+}): TransactionListItem {
+  return {
+    id: r.id,
+    // sign the amount for display: expense negative, income positive
+    amount: r.direction === "expense" ? -r.amount : r.amount,
+    // Display fallback, computed at read time so it can never go stale:
+    // custom title > subcategory name > category name > direction label.
+    title:
+      r.title ??
+      r.subName ??
+      r.catName ??
+      (r.direction === "expense" ? "Expense" : "Income"),
+    categoryName: r.catName ?? "Uncategorized",
+    note: r.note,
+    date: r.date,
+  };
+}
 
 /**
  * One page of transactions, newest first, joined to their subcategory/category
@@ -271,6 +311,7 @@ export async function getTransactionsPage(
       title: transactions.title,
       subName: subcategories.name,
       catName: categories.name,
+      note: transactions.note,
       date: transactions.date,
     })
     .from(transactions)
@@ -278,25 +319,13 @@ export async function getTransactionsPage(
       subcategories,
       eq(transactions.subcategoryId, subcategories.id)
     )
-    .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+    .leftJoin(categories, effectiveCategoryJoin())
     .where(walletId ? eq(transactions.walletId, walletId) : undefined)
     .orderBy(desc(transactions.date), desc(transactions.createdAt))
     .limit(pageSize)
     .offset(page * pageSize);
 
-  return rows.map((r) => ({
-    id: r.id,
-    // sign the amount for display: expense negative, income positive
-    amount: r.direction === "expense" ? -r.amount : r.amount,
-    // Display fallback, computed at read time so it can never go stale:
-    // custom title > subcategory name > direction label.
-    title:
-      r.title ??
-      r.subName ??
-      (r.direction === "expense" ? "Expense" : "Income"),
-    categoryName: r.catName ?? "Uncategorized",
-    date: r.date,
-  }));
+  return rows.map(toListItem);
 }
 
 /* --------------------------------- Stats --------------------------------- */
@@ -388,7 +417,7 @@ export async function getCategoryBreakdown(
     })
     .from(transactions)
     .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-    .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+    .leftJoin(categories, effectiveCategoryJoin())
     .where(
       and(scopeWhere(walletId, start, end), eq(transactions.direction, "expense"))
     )
@@ -527,12 +556,15 @@ export async function listBudgetsWithProgress(
   const rows = await db.select().from(budgets).orderBy(budgets.createdAt);
   const { start, end } = periodRange("month", anchor);
 
-  // Pull this month's expenses once, with each transaction's currency + category.
+  // Pull this month's expenses once, with each transaction's currency and its
+  // effective category (subcategory's parent, else the direct category).
   const spend = await db
     .select({
       amount: transactions.amount,
       currency: wallets.currency,
-      categoryId: subcategories.categoryId,
+      categoryId: sql<
+        string | null
+      >`coalesce(${subcategories.categoryId}, ${transactions.categoryId})`,
     })
     .from(transactions)
     .innerJoin(wallets, eq(transactions.walletId, wallets.id))
@@ -666,7 +698,7 @@ export async function getAllTransactionsForExport(): Promise<ExportRow[]> {
     .from(transactions)
     .innerJoin(wallets, eq(transactions.walletId, wallets.id))
     .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-    .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+    .leftJoin(categories, effectiveCategoryJoin())
     .orderBy(desc(transactions.date), desc(transactions.createdAt));
 
   return rows.map((r) => ({
@@ -704,11 +736,12 @@ export async function searchTransactions(
       title: transactions.title,
       subName: subcategories.name,
       catName: categories.name,
+      note: transactions.note,
       date: transactions.date,
     })
     .from(transactions)
     .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
-    .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+    .leftJoin(categories, effectiveCategoryJoin())
     .where(
       q
         ? or(
@@ -723,16 +756,5 @@ export async function searchTransactions(
     .limit(pageSize)
     .offset(page * pageSize);
 
-  return rows.map((r) => ({
-    id: r.id,
-    amount: r.direction === "expense" ? -r.amount : r.amount,
-    // Display fallback, computed at read time so it can never go stale:
-    // custom title > subcategory name > direction label.
-    title:
-      r.title ??
-      r.subName ??
-      (r.direction === "expense" ? "Expense" : "Income"),
-    categoryName: r.catName ?? "Uncategorized",
-    date: r.date,
-  }));
+  return rows.map(toListItem);
 }

@@ -1,6 +1,13 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
-import { Calendar, ChevronDown, ChevronRight } from "lucide-react-native";
+import {
+  Calendar,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Minus,
+  Plus,
+} from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -18,10 +25,8 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AmountInput } from "@/components/ui/amount-input";
-import { Chip } from "@/components/ui/chip";
 import { DeleteRow } from "@/components/ui/delete-row";
 import { ModalHeader } from "@/components/ui/modal-header";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Colors } from "@/constants/theme";
 import {
   addTransaction,
@@ -45,11 +50,6 @@ if (
 }
 
 type Direction = "expense" | "income";
-
-const DIRECTION_OPTIONS = [
-  { value: "expense" as const, label: "Expense" },
-  { value: "income" as const, label: "Income" },
-];
 
 function isSameDay(a: Date, b: Date) {
   return (
@@ -77,6 +77,8 @@ export default function AddTransaction() {
   const [walletIndex, setWalletIndex] = useState(0);
   const [tree, setTree] = useState<CategoryWithSubs[]>([]);
   const [openCategoryId, setOpenCategoryId] = useState<string | null>(null);
+  /** Selected category — valid on its own, no subcategory required. */
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [subcategoryId, setSubcategoryId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState("");
@@ -133,6 +135,7 @@ export default function AddTransaction() {
       if (cancelled || !tx) return;
       setDirection(tx.direction);
       setAmount((tx.amount / 100).toFixed(2));
+      setCategoryId(tx.categoryId);
       setSubcategoryId(tx.subcategoryId);
       setTitle(tx.title ?? "");
       setMemo(tx.note ?? "");
@@ -153,33 +156,59 @@ export default function AddTransaction() {
     pendingWalletId.current = null; // consume it — never re-apply
   }, [wallets]);
 
+  // Legacy rows (created before the categoryId column) only carry a
+  // subcategoryId; derive the parent category once the tree is loaded.
+  useEffect(() => {
+    if (categoryId || !subcategoryId || tree.length === 0) return;
+    const parent = tree.find((c) =>
+      c.subs.some((s) => s.id === subcategoryId)
+    );
+    if (parent) setCategoryId(parent.id);
+  }, [tree, categoryId, subcategoryId]);
+
   /** Switch direction AND clear the (now-invalid) category selection. Only the
    *  user's toggle triggers this — prefilling direction must not clear it. */
   function selectDirection(next: Direction) {
     if (next === direction) return;
     setDirection(next);
     setOpenCategoryId(null);
+    setCategoryId(null);
     setSubcategoryId(null);
   }
 
   const wallet = wallets[walletIndex] ?? null;
 
-  const selectedSub = useMemo(() => {
-    for (const c of tree) {
-      const s = c.subs.find((x) => x.id === subcategoryId);
-      if (s) return { sub: s, category: c };
-    }
-    return null;
-  }, [tree, subcategoryId]);
+  /** Name shown as the title placeholder: subcategory > category. */
+  const selectionName = useMemo(() => {
+    const cat = tree.find((c) => c.id === categoryId);
+    const sub = cat?.subs.find((s) => s.id === subcategoryId);
+    return sub?.name ?? cat?.name ?? null;
+  }, [tree, categoryId, subcategoryId]);
 
   function toggleExpanded() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpanded((v) => !v);
   }
 
-  function toggleCategory(catId: string) {
+  /** Tapping a category selects it outright (no subcategory needed) and
+   *  reveals its subcategories to optionally refine. Tapping the selected
+   *  category again just folds/unfolds its subcategory list. */
+  function selectCategory(catId: string) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setOpenCategoryId((cur) => (cur === catId ? null : catId));
+    if (categoryId === catId) {
+      setOpenCategoryId((cur) => (cur === catId ? null : catId));
+      return;
+    }
+    setCategoryId(catId);
+    setSubcategoryId(null);
+    setOpenCategoryId(catId);
+  }
+
+  /** Tapping a subcategory refines the selection; tapping it again clears the
+   *  refinement but keeps the category. */
+  function selectSubcategory(catId: string, subId: string) {
+    setCategoryId(catId);
+    setSubcategoryId((cur) => (cur === subId ? null : subId));
   }
 
   function cycleWallet() {
@@ -202,6 +231,7 @@ export default function AddTransaction() {
     // so they can never go stale when the transaction is later edited.
     const payload = {
       walletId: wallet.id,
+      categoryId: categoryId ?? null,
       subcategoryId: subcategoryId ?? null,
       amount: cents,
       direction,
@@ -271,13 +301,47 @@ export default function AddTransaction() {
         keyboardShouldPersistTaps="handled"
         bottomOffset={20}
       >
-        {/* Direction toggle */}
-        <View style={styles.toggle}>
-          <SegmentedControl
-            options={DIRECTION_OPTIONS}
-            value={direction}
-            onChange={selectDirection}
-          />
+        {/* Direction: minimalist − / + with a small label tag */}
+        <View style={styles.directionRow}>
+          <Pressable
+            style={[
+              styles.dirBtn,
+              direction === "expense" && styles.dirBtnExpense,
+            ]}
+            hitSlop={6}
+            onPress={() => selectDirection("expense")}
+          >
+            <Minus
+              size={22}
+              color={direction === "expense" ? Colors.negative : Colors.textMuted}
+            />
+          </Pressable>
+          <Pressable
+            style={[
+              styles.dirBtn,
+              direction === "income" && styles.dirBtnIncome,
+            ]}
+            hitSlop={6}
+            onPress={() => selectDirection("income")}
+          >
+            <Plus
+              size={22}
+              color={direction === "income" ? Colors.positive : Colors.textMuted}
+            />
+          </Pressable>
+          <View style={styles.dirTag}>
+            <Text
+              style={[
+                styles.dirTagText,
+                {
+                  color:
+                    direction === "expense" ? Colors.negative : Colors.positive,
+                },
+              ]}
+            >
+              {direction === "expense" ? "Expense" : "Income"}
+            </Text>
+          </View>
         </View>
 
         {/* Amount — real visible input so the keyboard reliably appears */}
@@ -306,14 +370,14 @@ export default function AddTransaction() {
           </View>
         </Pressable>
 
-        {/* Category → subcategory */}
+        {/* Category — selectable on its own; subcategories optionally refine */}
         <Text style={styles.sectionLabel}>Category · optional</Text>
         <View style={styles.rows}>
           {tree.map((c, i) => {
             const Icon = categoryIcon(c.icon);
             const isLast = i === tree.length - 1;
             const isOpen = c.id === openCategoryId;
-            const hasSelected = c.subs.some((s) => s.id === subcategoryId);
+            const isSelected = c.id === categoryId;
             return (
               <View key={c.id}>
                 <Pressable
@@ -321,52 +385,69 @@ export default function AddTransaction() {
                     styles.catRow,
                     isLast && !isOpen && styles.catRowLast,
                   ]}
-                  onPress={() => toggleCategory(c.id)}
+                  onPress={() => selectCategory(c.id)}
                 >
                   <View
                     style={[
                       styles.catIcon,
-                      hasSelected && styles.catIconSelected,
+                      isSelected && styles.catIconSelected,
                     ]}
                   >
                     <Icon
                       size={17}
-                      color={hasSelected ? Colors.accent : Colors.textMuted}
+                      color={isSelected ? Colors.accent : Colors.textMuted}
                     />
                   </View>
                   <Text
                     style={[
                       styles.catName,
-                      hasSelected && styles.catNameSelected,
+                      isSelected && styles.catNameSelected,
                     ]}
                   >
                     {c.name}
                   </Text>
-                  {hasSelected && selectedSub ? (
-                    <Text style={styles.catSelectedSub}>
-                      {selectedSub.sub.name}
-                    </Text>
-                  ) : null}
-                  <ChevronRight
-                    size={16}
-                    color={Colors.textMuted}
-                    style={{
-                      transform: [{ rotate: isOpen ? "90deg" : "0deg" }],
-                    }}
-                  />
+                  {isSelected && (
+                    <Check size={16} color={Colors.accent} />
+                  )}
+                  {c.subs.length > 0 && (
+                    <ChevronRight
+                      size={16}
+                      color={Colors.textMuted}
+                      style={{
+                        transform: [{ rotate: isOpen ? "90deg" : "0deg" }],
+                      }}
+                    />
+                  )}
                 </Pressable>
 
-                {/* Subcategory chips */}
+                {/* Subcategories as slim indented rows */}
                 {isOpen && (
-                  <View style={styles.subWrap}>
-                    {c.subs.map((s) => (
-                      <Chip
-                        key={s.id}
-                        label={s.name}
-                        selected={s.id === subcategoryId}
-                        onPress={() => setSubcategoryId(s.id)}
-                      />
-                    ))}
+                  <View style={styles.subList}>
+                    {c.subs.map((s, si) => {
+                      const subSelected = s.id === subcategoryId;
+                      return (
+                        <Pressable
+                          key={s.id}
+                          style={[
+                            styles.subRow,
+                            si === c.subs.length - 1 && styles.subRowLast,
+                          ]}
+                          onPress={() => selectSubcategory(c.id, s.id)}
+                        >
+                          <Text
+                            style={[
+                              styles.subName,
+                              subSelected && styles.subNameSelected,
+                            ]}
+                          >
+                            {s.name}
+                          </Text>
+                          {subSelected && (
+                            <Check size={15} color={Colors.accent} />
+                          )}
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 )}
               </View>
@@ -392,7 +473,7 @@ export default function AddTransaction() {
                 style={styles.fieldInput}
                 value={title}
                 onChangeText={setTitle}
-                placeholder={selectedSub?.sub.name ?? "Title"}
+                placeholder={selectionName ?? "Title"}
                 placeholderTextColor={Colors.textMuted}
               />
             </View>
@@ -459,8 +540,42 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
 
-  toggle: {
+  directionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     marginBottom: 24,
+  },
+  dirBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
+  },
+  dirBtnExpense: {
+    borderColor: Colors.negative,
+    backgroundColor: "#2E1A1A",
+  },
+  dirBtnIncome: {
+    borderColor: Colors.positive,
+    backgroundColor: "#0F2E24",
+  },
+  dirTag: {
+    marginLeft: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  dirTagText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
 
   amountBlock: {
@@ -546,19 +661,32 @@ const styles = StyleSheet.create({
   catNameSelected: {
     color: Colors.text,
   },
-  catSelectedSub: {
-    fontSize: 12,
-    color: Colors.accent,
-    fontWeight: "600",
-    marginRight: 4,
+  subList: {
+    marginLeft: 47,
+    marginBottom: 8,
+    borderLeftWidth: 1,
+    borderColor: Colors.border,
   },
-
-  subWrap: {
+  subRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingBottom: 14,
-    paddingLeft: 47,
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingLeft: 14,
+    paddingRight: 4,
+    borderBottomWidth: 1,
+    borderColor: Colors.border,
+  },
+  subRowLast: {
+    borderBottomWidth: 0,
+  },
+  subName: {
+    fontSize: 14,
+    color: Colors.textMuted,
+  },
+  subNameSelected: {
+    color: Colors.text,
+    fontWeight: "600",
   },
 
   moreRow: {

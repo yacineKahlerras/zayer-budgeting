@@ -4,11 +4,20 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
 import type { TransactionListItem } from "@/db/queries";
-import { formatCents } from "@/utils/format";
+import { formatCents, monthShort } from "@/utils/format";
 
 /** A single transaction line. Tapping it opens the transaction for editing. */
 export function TransactionRow({ item }: { item: TransactionListItem }) {
   const isIncome = item.amount >= 0;
+  // Don't repeat the category when the title already IS the category (a
+  // category-only transaction with no custom title).
+  const metaParts = [
+    ...(item.categoryName !== item.title ? [item.categoryName] : []),
+    ...(item.note ? [item.note] : []),
+  ];
+  const meta = metaParts.join(" · ");
+  const dateLabel = `${monthShort(item.date.getMonth())} ${item.date.getDate()}`;
+
   return (
     <Pressable
       style={styles.row}
@@ -24,18 +33,27 @@ export function TransactionRow({ item }: { item: TransactionListItem }) {
         )}
       </View>
       <View style={styles.rowInfo}>
-        <Text style={styles.rowName}>{item.title}</Text>
-        <Text style={styles.rowMeta}>{item.categoryName}</Text>
+        <Text style={styles.rowName} numberOfLines={1}>
+          {item.title}
+        </Text>
+        {meta.length > 0 && (
+          <Text style={styles.rowMeta} numberOfLines={1}>
+            {meta}
+          </Text>
+        )}
       </View>
-      <Text
-        style={[
-          styles.rowAmount,
-          { color: isIncome ? Colors.positive : Colors.text },
-        ]}
-      >
-        {isIncome ? "+" : "-"}
-        {formatCents(item.amount)}
-      </Text>
+      <View style={styles.rowRight}>
+        <Text
+          style={[
+            styles.rowAmount,
+            { color: isIncome ? Colors.positive : Colors.text },
+          ]}
+        >
+          {isIncome ? "+" : "-"}
+          {formatCents(item.amount)}
+        </Text>
+        <Text style={styles.rowDate}>{dateLabel}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -57,6 +75,7 @@ const styles = StyleSheet.create({
   rowInfo: {
     flex: 1,
     marginLeft: 14,
+    marginRight: 10,
   },
   rowName: {
     color: Colors.text,
@@ -68,8 +87,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
+  rowRight: {
+    alignItems: "flex-end",
+  },
   rowAmount: {
     fontSize: 16,
     fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  rowDate: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
   },
 });

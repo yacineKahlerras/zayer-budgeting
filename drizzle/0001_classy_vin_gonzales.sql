@@ -1,0 +1,1 @@
+ALTER TABLE `transactions` ADD `category_id` text REFERENCES categories(id);

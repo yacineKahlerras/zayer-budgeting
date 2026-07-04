@@ -1,14 +1,21 @@
 import { useFocusEffect } from "expo-router";
-import { ChevronLeft, ChevronRight } from "lucide-react-native";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  SlidersHorizontal,
+} from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 
 import { Screen, ScreenTitle } from "@/components/ui/screen";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -36,6 +43,26 @@ const PERIOD_OPTIONS = [
   { value: "week" as const, label: "Week" },
   { value: "month" as const, label: "Month" },
   { value: "year" as const, label: "Year" },
+];
+
+/** How the spending-by-category section is visualized. */
+type BreakdownView = "bars" | "donut" | "list";
+const BREAKDOWN_VIEWS: { value: BreakdownView; label: string }[] = [
+  { value: "bars", label: "Bars" },
+  { value: "donut", label: "Donut" },
+  { value: "list", label: "Ranked list" },
+];
+
+/** Distinct slice colors for the donut + legends. */
+const SLICE_COLORS = [
+  Colors.accent,
+  Colors.positive,
+  "#F59E0B",
+  Colors.negative,
+  "#A78BFA",
+  "#F472B6",
+  "#22D3EE",
+  "#94A3B8",
 ];
 
 function rangeLabel(period: Period, anchor: Date): string {
@@ -83,6 +110,9 @@ export default function StatsScreen() {
   const [breakdown, setBreakdown] = useState<CategorySlice[]>([]);
   const [monthly, setMonthly] = useState<MonthlyTotal[]>([]);
   const [loading, setLoading] = useState(true);
+  // Visualization options, tucked behind the sliders button.
+  const [breakdownView, setBreakdownView] = useState<BreakdownView>("bars");
+  const [optionsOpen, setOptionsOpen] = useState(false);
 
   const currency =
     wallets.find((w) => w.id === selectedWallet)?.currency ?? "USD";
@@ -252,10 +282,54 @@ export default function StatsScreen() {
               </View>
             </View>
 
-            {/* Category breakdown */}
-            <Text style={styles.sectionLabel}>Spending by category</Text>
+            {/* Category breakdown — view style behind the sliders button */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>Spending by category</Text>
+              <Pressable hitSlop={10} onPress={() => setOptionsOpen(true)}>
+                <SlidersHorizontal size={16} color={Colors.textMuted} />
+              </Pressable>
+            </View>
             {breakdown.length === 0 ? (
               <Text style={styles.emptyInline}>No spending this period.</Text>
+            ) : breakdownView === "donut" ? (
+              <DonutBreakdown
+                breakdown={breakdown}
+                total={totalExpense}
+                currency={currency}
+              />
+            ) : breakdownView === "list" ? (
+              <View style={styles.rankedList}>
+                {breakdown.map((s, i) => {
+                  const pct = totalExpense > 0 ? s.amount / totalExpense : 0;
+                  return (
+                    <View
+                      key={s.categoryId}
+                      style={[
+                        styles.rankedRow,
+                        i === breakdown.length - 1 && styles.rankedRowLast,
+                      ]}
+                    >
+                      <Text style={styles.rankedIndex}>{i + 1}</Text>
+                      <View
+                        style={[
+                          styles.rankedDot,
+                          {
+                            backgroundColor:
+                              SLICE_COLORS[i % SLICE_COLORS.length],
+                          },
+                        ]}
+                      />
+                      <Text style={styles.rankedName}>{s.categoryName}</Text>
+                      <Text style={styles.rankedPct}>
+                        {Math.round(pct * 100)}%
+                      </Text>
+                      <Text style={styles.rankedAmount}>
+                        {formatCents(s.amount, currency)}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
             ) : (
               <View style={styles.breakdown}>
                 {breakdown.map((s) => {
@@ -337,7 +411,126 @@ export default function StatsScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* View options */}
+      <Modal
+        visible={optionsOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOptionsOpen(false)}
+      >
+        <Pressable
+          style={styles.optionsBackdrop}
+          onPress={() => setOptionsOpen(false)}
+        >
+          <View style={styles.optionsMenu}>
+            <Text style={styles.optionsTitle}>Category chart</Text>
+            {BREAKDOWN_VIEWS.map((v, i) => {
+              const active = v.value === breakdownView;
+              return (
+                <Pressable
+                  key={v.value}
+                  style={[
+                    styles.optionsRow,
+                    i === BREAKDOWN_VIEWS.length - 1 && styles.optionsRowLast,
+                  ]}
+                  onPress={() => {
+                    setBreakdownView(v.value);
+                    setOptionsOpen(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.optionsText,
+                      active && styles.optionsTextActive,
+                    ]}
+                  >
+                    {v.label}
+                  </Text>
+                  {active && <Check size={16} color={Colors.accent} />}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
     </Screen>
+  );
+}
+
+/** Donut chart of expense share per category, with a color legend. */
+function DonutBreakdown({
+  breakdown,
+  total,
+  currency,
+}: {
+  breakdown: CategorySlice[];
+  total: number;
+  currency: string;
+}) {
+  const size = 180;
+  const stroke = 26;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+
+  let acc = 0;
+  const segments = breakdown.map((s, i) => {
+    const frac = total > 0 ? s.amount / total : 0;
+    const seg = {
+      key: s.categoryId,
+      color: SLICE_COLORS[i % SLICE_COLORS.length],
+      length: frac * c,
+      offset: acc,
+    };
+    acc += frac * c;
+    return seg;
+  });
+
+  return (
+    <View style={styles.donutWrap}>
+      <View style={styles.donutChart}>
+        <Svg width={size} height={size}>
+          {segments.map((s) => (
+            <Circle
+              key={s.key}
+              cx={size / 2}
+              cy={size / 2}
+              r={r}
+              stroke={s.color}
+              strokeWidth={stroke}
+              fill="none"
+              strokeDasharray={`${Math.max(s.length - 2, 1)} ${c}`}
+              strokeDashoffset={-s.offset}
+              strokeLinecap="butt"
+              transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            />
+          ))}
+        </Svg>
+        <View style={styles.donutCenter}>
+          <Text style={styles.donutTotal}>{formatCents(total, currency)}</Text>
+          <Text style={styles.donutCaption}>spent</Text>
+        </View>
+      </View>
+      <View style={styles.donutLegend}>
+        {breakdown.map((s, i) => {
+          const pct = total > 0 ? Math.round((s.amount / total) * 100) : 0;
+          return (
+            <View key={s.categoryId} style={styles.donutLegendRow}>
+              <View
+                style={[
+                  styles.legendDot,
+                  { backgroundColor: SLICE_COLORS[i % SLICE_COLORS.length] },
+                ]}
+              />
+              <Text style={styles.donutLegendName} numberOfLines={1}>
+                {s.categoryName}
+              </Text>
+              <Text style={styles.donutLegendPct}>{pct}%</Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -407,6 +600,151 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 12,
     marginTop: 8,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  /* Ranked-list view */
+  rankedList: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    marginBottom: 28,
+  },
+  rankedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: Colors.border,
+  },
+  rankedRowLast: {
+    borderBottomWidth: 0,
+  },
+  rankedIndex: {
+    width: 18,
+    color: Colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  rankedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  rankedName: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  rankedPct: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    width: 40,
+    textAlign: "right",
+  },
+  rankedAmount: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+    minWidth: 76,
+    textAlign: "right",
+  },
+
+  /* Donut view */
+  donutWrap: {
+    marginBottom: 28,
+  },
+  donutChart: {
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  donutCenter: {
+    position: "absolute",
+    alignItems: "center",
+  },
+  donutTotal: {
+    color: Colors.text,
+    fontSize: 18,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+  },
+  donutCaption: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  donutLegend: {
+    marginTop: 16,
+    gap: 8,
+  },
+  donutLegendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  donutLegendName: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  donutLegendPct: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    fontVariant: ["tabular-nums"],
+  },
+
+  /* Options modal */
+  optionsBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    paddingHorizontal: 48,
+  },
+  optionsMenu: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+  },
+  optionsTitle: {
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: Colors.textMuted,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  optionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderColor: Colors.border,
+  },
+  optionsRowLast: {
+    borderBottomWidth: 0,
+  },
+  optionsText: {
+    color: Colors.textMuted,
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  optionsTextActive: {
+    color: Colors.text,
+    fontWeight: "600",
   },
   emptyInline: {
     color: Colors.textMuted,

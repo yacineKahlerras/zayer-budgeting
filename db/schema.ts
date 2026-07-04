@@ -83,6 +83,11 @@ export const transactions = sqliteTable("transactions", {
   subcategoryId: text("subcategory_id").references(() => subcategories.id, {
     onDelete: "set null",
   }),
+  /** The top-level category. Set whenever a category is chosen — with or
+   *  without a subcategory — so a category alone is a valid selection. */
+  categoryId: text("category_id").references(() => categories.id, {
+    onDelete: "set null",
+  }),
   /** Positive magnitude in minor units; `direction` carries the sign. */
   amount: integer("amount").notNull(),
   direction: text("direction", { enum: ["expense", "income"] }).notNull(),
