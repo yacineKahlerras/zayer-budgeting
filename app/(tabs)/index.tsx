@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from "expo-router";
-import { Plus, Search } from "lucide-react-native";
+import { Plus, Search, Settings } from "lucide-react-native";
 import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -54,6 +54,17 @@ export default function HomeScreen() {
         walletId={walletFilter}
         header={
           <View>
+            <View style={styles.topBar}>
+              <Text style={styles.appTitle}>Zayer</Text>
+              <View style={styles.topActions}>
+                <Pressable hitSlop={10} onPress={() => router.push("/search")}>
+                  <Search size={22} color={Colors.textMuted} />
+                </Pressable>
+                <Pressable hitSlop={10} onPress={() => router.push("/settings")}>
+                  <Settings size={22} color={Colors.textMuted} />
+                </Pressable>
+              </View>
+            </View>
             {wallets.length > 1 && (
               <View style={styles.selectorWrap}>
                 <WalletSelector
@@ -64,15 +75,7 @@ export default function HomeScreen() {
               </View>
             )}
             <AccountCard wallets={wallets} selectedWalletId={selected} />
-            <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Transactions</Text>
-              <Pressable
-                hitSlop={10}
-                onPress={() => router.push("/search")}
-              >
-                <Search size={20} color={Colors.textMuted} />
-              </Pressable>
-            </View>
+            <Text style={styles.sectionTitle}>Transactions</Text>
           </View>
         }
       />
@@ -81,20 +84,33 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  selectorWrap: {
-    marginHorizontal: -20,
-    marginTop: 4,
-  },
-  sectionRow: {
+  topBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 4,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  appTitle: {
+    color: Colors.text,
+    fontSize: 24,
+    fontWeight: "800",
+    letterSpacing: -0.5,
+  },
+  topActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 18,
+  },
+  selectorWrap: {
+    marginHorizontal: -20,
+    marginTop: 8,
   },
   sectionTitle: {
     color: Colors.text,
     fontSize: 18,
     fontWeight: "700",
+    marginBottom: 4,
   },
   fab: {
     position: "absolute",

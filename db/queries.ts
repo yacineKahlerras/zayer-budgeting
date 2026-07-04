@@ -102,9 +102,16 @@ export async function updateWallet(id: string, input: WalletInput) {
 
 /**
  * Delete a wallet. Its transactions are removed too (ON DELETE CASCADE in the
- * schema), so the caller should confirm with the user first.
+ * schema), so the caller should confirm with the user first. Refuses to delete
+ * the last wallet — the app always needs at least one to record transactions.
  */
 export async function deleteWallet(id: string) {
+  const active = await listWallets();
+  if (active.length <= 1) {
+    throw new Error(
+      "You need at least one wallet. Add another before deleting this one."
+    );
+  }
   await db.delete(wallets).where(eq(wallets.id, id));
 }
 
@@ -579,13 +586,12 @@ export async function addCategory(input: CategoryInput): Promise<string> {
   return id;
 }
 
-export async function updateCategory(
-  id: string,
-  input: Pick<CategoryInput, "name" | "icon">
-) {
+/** Rename a category. The icon is left untouched (there is no icon picker yet,
+ *  so we must not wipe a default category's icon on rename). */
+export async function updateCategory(id: string, input: { name: string }) {
   await db
     .update(categories)
-    .set({ name: input.name, icon: input.icon })
+    .set({ name: input.name })
     .where(eq(categories.id, id));
 }
 

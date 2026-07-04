@@ -92,7 +92,7 @@ export default function EditCategory() {
     setSaving(true);
     try {
       if (editing && id) {
-        await updateCategory(id, { name: name.trim(), icon: null });
+        await updateCategory(id, { name: name.trim() });
       } else {
         const catId = await addCategory({
           name: name.trim(),
