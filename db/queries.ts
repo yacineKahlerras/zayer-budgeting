@@ -758,3 +758,36 @@ export async function searchTransactions(
 
   return rows.map(toListItem);
 }
+
+/* --------------------------------- Import -------------------------------- */
+
+/**
+ * Find an active wallet by name (case-insensitive) and currency, or create it.
+ * Used by CSV import so re-importing doesn't duplicate wallets.
+ */
+export async function getOrCreateWallet(
+  name: string,
+  currency: string
+): Promise<string> {
+  const existing = await listWallets();
+  const match = existing.find(
+    (w) =>
+      w.name.toLowerCase() === name.toLowerCase() && w.currency === currency
+  );
+  if (match) return match.id;
+  return addWallet({ name, currency, initialBalance: 0 });
+}
+
+/**
+ * Find a top-level category by name (case-insensitive), or create it with the
+ * given kind. Returns the category id.
+ */
+export async function getOrCreateCategory(
+  name: string,
+  kind: "expense" | "income"
+): Promise<string> {
+  const tree = await listCategoryTree();
+  const match = tree.find((c) => c.name.toLowerCase() === name.toLowerCase());
+  if (match) return match.id;
+  return addCategory({ name, kind, icon: null });
+}

@@ -4,6 +4,7 @@ import {
   Download,
   FlaskConical,
   Tags,
+  Upload,
   X,
   type LucideIcon,
 } from "lucide-react-native";
@@ -59,6 +60,12 @@ export default function SettingsScreen() {
             label="Categories"
             hint="Add and edit your categories"
             onPress={() => router.push("/categories")}
+          />
+          <Row
+            icon={Upload}
+            label="Import data (CSV)"
+            hint="Bring history from another app"
+            onPress={() => router.push("/import")}
           />
           <Row
             icon={Download}

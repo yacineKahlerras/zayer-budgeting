@@ -77,6 +77,10 @@ export default function RootLayout() {
               name="search"
               options={{ presentation: "modal", headerShown: false }}
             />
+            <Stack.Screen
+              name="import"
+              options={{ presentation: "modal", headerShown: false }}
+            />
           </Stack>
         )}
         <StatusBar style="light" />

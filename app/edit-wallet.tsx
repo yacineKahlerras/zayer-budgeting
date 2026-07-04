@@ -23,7 +23,7 @@ import {
 } from "@/db/queries";
 import { toCents } from "@/utils/format";
 
-const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD"];
+const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "DZD", "MAD", "TND", "SAR", "AED", "EGP"];
 
 export default function EditWallet() {
   const { id } = useLocalSearchParams<{ id?: string }>();

@@ -18,6 +18,12 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   JPY: "¥",
   CAD: "$",
   AUD: "$",
+  DZD: "DA",
+  MAD: "DH",
+  TND: "DT",
+  SAR: "SR",
+  AED: "AED",
+  EGP: "E£",
 };
 
 /** The display symbol for a currency code, defaulting to "$". */
