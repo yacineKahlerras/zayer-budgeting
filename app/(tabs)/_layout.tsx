@@ -1,5 +1,10 @@
 import { Tabs } from "expo-router";
-import { ChartColumn, House, Wallet } from "lucide-react-native";
+import {
+  ChartColumn,
+  House,
+  PiggyBank,
+  Wallet,
+} from "lucide-react-native";
 import React from "react";
 
 import { HapticTab } from "@/components/haptic-tab";
@@ -24,6 +29,13 @@ export default function TabLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color }) => <House size={28} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="budgets"
+        options={{
+          title: "Budgets",
+          tabBarIcon: ({ color }) => <PiggyBank size={28} color={color} />,
         }}
       />
       <Tabs.Screen

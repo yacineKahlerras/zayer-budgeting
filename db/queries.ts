@@ -7,6 +7,7 @@ import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 
 import { db } from "./client";
 import {
+  budgets,
   categories,
   subcategories,
   transactions,
@@ -439,4 +440,119 @@ export async function getMonthlyTotals(
     else b.expense += r.amount;
   }
   return [...buckets.values()];
+}
+
+/* -------------------------------- Budgets -------------------------------- */
+/*
+ * Budgets are monthly and per-currency. A budget is either scoped to one
+ * top-level category (categoryId set) or is an overall cap (categoryId null).
+ * "Actual" spending is the sum of expenses in the current month whose wallet
+ * matches the budget's currency (and category, when scoped).
+ */
+
+export type BudgetInput = {
+  name: string | null;
+  amount: number; // cents
+  categoryId: string | null; // null = overall cap
+  currency: string;
+};
+
+export type BudgetWithProgress = {
+  id: string;
+  name: string | null;
+  amount: number; // limit, cents
+  categoryId: string | null;
+  categoryName: string | null;
+  icon: string | null;
+  currency: string;
+  spent: number; // cents spent this month
+  remaining: number; // amount - spent (can be negative)
+};
+
+export async function addBudget(input: BudgetInput): Promise<string> {
+  const id = newId("b");
+  await db.insert(budgets).values({
+    id,
+    name: input.name,
+    amount: input.amount,
+    categoryId: input.categoryId,
+    walletId: null,
+    period: "month",
+    currency: input.currency,
+  });
+  return id;
+}
+
+export async function updateBudget(id: string, input: BudgetInput) {
+  await db
+    .update(budgets)
+    .set({
+      name: input.name,
+      amount: input.amount,
+      categoryId: input.categoryId,
+      currency: input.currency,
+    })
+    .where(eq(budgets.id, id));
+}
+
+export async function deleteBudget(id: string) {
+  await db.delete(budgets).where(eq(budgets.id, id));
+}
+
+export async function getBudget(id: string) {
+  const [row] = await db.select().from(budgets).where(eq(budgets.id, id));
+  return row ?? null;
+}
+
+/**
+ * All budgets with their spent/remaining for the CURRENT month. Spending is
+ * matched by the budget's currency (via the transaction's wallet) and, when the
+ * budget is category-scoped, by that category.
+ */
+export async function listBudgetsWithProgress(
+  anchor: Date
+): Promise<BudgetWithProgress[]> {
+  const rows = await db.select().from(budgets).orderBy(budgets.createdAt);
+  const { start, end } = periodRange("month", anchor);
+
+  // Pull this month's expenses once, with each transaction's currency + category.
+  const spend = await db
+    .select({
+      amount: transactions.amount,
+      currency: wallets.currency,
+      categoryId: subcategories.categoryId,
+    })
+    .from(transactions)
+    .innerJoin(wallets, eq(transactions.walletId, wallets.id))
+    .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
+    .where(
+      and(
+        eq(transactions.direction, "expense"),
+        gte(transactions.date, start),
+        lt(transactions.date, end)
+      )
+    );
+
+  // Category names/icons for labeling.
+  const cats = await db.select().from(categories);
+  const catById = new Map(cats.map((c) => [c.id, c]));
+
+  return rows.map((b) => {
+    const spent = spend
+      .filter((s) => s.currency === b.currency)
+      .filter((s) => (b.categoryId ? s.categoryId === b.categoryId : true))
+      .reduce((sum, s) => sum + s.amount, 0);
+    const cat = b.categoryId ? catById.get(b.categoryId) : null;
+    return {
+      id: b.id,
+      name: b.name,
+      amount: b.amount,
+      categoryId: b.categoryId,
+      categoryName: cat?.name ?? null,
+      icon: cat?.icon ?? null,
+      currency: b.currency,
+      spent,
+      remaining: b.amount - spent,
+    };
+  });
 }

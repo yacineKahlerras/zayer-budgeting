@@ -57,6 +57,10 @@ export default function RootLayout() {
               name="edit-wallet"
               options={{ presentation: "modal", headerShown: false }}
             />
+            <Stack.Screen
+              name="edit-budget"
+              options={{ presentation: "modal", headerShown: false }}
+            />
           </Stack>
         )}
         <StatusBar style="light" />
