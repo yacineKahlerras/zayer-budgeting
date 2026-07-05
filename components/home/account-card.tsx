@@ -84,6 +84,7 @@ export function AccountCard({
         >
           <Text style={styles.balanceSymbol}>
             {currencySymbol(selected?.currency ?? "USD")}
+            {" "}
           </Text>
           {formatCents(selected?.balance ?? 0, selected?.currency).slice(
             currencySymbol(selected?.currency ?? "USD").length
@@ -222,6 +223,7 @@ const styles = StyleSheet.create({
   },
   balanceSymbol: {
     color: Colors.textMuted,
+    fontSize: 35,
   },
   editBtn: {
     width: 36,
