@@ -1,0 +1,24 @@
+# The wallet row in a new transaction opens the Switch-wallet dialog and
+# switching updates the row + currency.
+appId: com.yacinekahlerras.ZayerBudgeting
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Zayer"
+    timeout: 30000
+- tapOn:
+    point: "88%,82%"
+- extendedWaitUntil:
+    visible: "New transaction"
+    timeout: 15000
+- hideKeyboard
+- tapOn: "Wallet"
+- extendedWaitUntil:
+    visible: "Switch wallet"
+    timeout: 10000
+- tapOn: "usd"
+- assertVisible: "usd · USD"
+- assertNotVisible: "Switch wallet"
+# Cancel out without saving.
+- tapOn: "Cancel"

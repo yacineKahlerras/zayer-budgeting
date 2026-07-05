@@ -1,0 +1,41 @@
+# Budgets: list renders; create a yearly USD Housing budget through the
+# collapsed scope picker; the card appears with its meta line.
+appId: com.yacinekahlerras.ZayerBudgeting
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Zayer"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Open debugger to view warnings."
+    commands:
+      - tapOn:
+          point: "92%,92%"
+- tapOn: "Budgets"
+- extendedWaitUntil:
+    visible: "Spending limits"
+    timeout: 15000
+# + button (top-right)
+- tapOn:
+    point: "90%,9%"
+- extendedWaitUntil:
+    visible: "New budget"
+    timeout: 15000
+- inputText: "300"
+- hideKeyboard
+- tapOn: "Year"
+- assertVisible: "Yearly limit"
+# Budgets are per-currency; pick USD explicitly (default follows first wallet).
+- tapOn: "USD"
+# Scope picker: collapsed summary shows Overall; expand and pick Housing.
+- tapOn: "Overall"
+- assertVisible: "Food"
+- tapOn: "Housing"
+- tapOn: "Save"
+- extendedWaitUntil:
+    visible: "Spending limits"
+    timeout: 15000
+- assertVisible: "Housing"
+- assertVisible: "Yearly.*USD"

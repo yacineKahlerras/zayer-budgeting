@@ -1,0 +1,31 @@
+# Add a transaction end to end: amount → category → subcategory → save →
+# appears in the home list.
+appId: com.yacinekahlerras.ZayerBudgeting
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Zayer"
+    timeout: 30000
+# FAB (bottom-right +)
+- tapOn:
+    point: "88%,82%"
+- extendedWaitUntil:
+    visible: "New transaction"
+    timeout: 15000
+# Amount autofocuses; type into it.
+- inputText: "9.99"
+- hideKeyboard
+# Category picker is collapsed by default.
+- assertVisible: "Choose category"
+- tapOn: "Choose category"
+- assertVisible: "Housing"
+- tapOn: "Food"
+- assertVisible: "Drinks"
+- tapOn: "Drinks"
+# Save (header check).
+- tapOn: "Save"
+- extendedWaitUntil:
+    visible: "Transactions"
+    timeout: 15000
+- assertVisible: "Drinks"

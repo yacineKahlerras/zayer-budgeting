@@ -1,0 +1,18 @@
+# Search finds imported transactions by category text.
+appId: com.yacinekahlerras.ZayerBudgeting
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Zayer"
+    timeout: 30000
+# Search icon in the home top bar.
+- tapOn:
+    point: "83%,8%"
+- extendedWaitUntil:
+    visible: "Search"
+    timeout: 15000
+- inputText: "Groceries"
+- extendedWaitUntil:
+    visible: "Groceries"
+    timeout: 10000

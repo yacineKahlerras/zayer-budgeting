@@ -1,0 +1,35 @@
+# Stats: four period filters, Today label on Day, wallet dialog from the pill.
+appId: com.yacinekahlerras.ZayerBudgeting
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Zayer"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Open debugger to view warnings."
+    commands:
+      - tapOn:
+          point: "92%,92%"
+- tapOn: "Stats"
+- extendedWaitUntil:
+    visible: "Month"
+    timeout: 15000
+- assertVisible: "Day"
+- assertVisible: "Week"
+- assertVisible: "Year"
+- assertVisible: "SPENDING BY CATEGORY"
+- tapOn: "Day"
+- assertVisible: "Today"
+- tapOn: "Year"
+- assertVisible: "INCOME"
+- assertVisible: "EXPENSE"
+- assertVisible: "NET"
+# Wallet dialog from the centered pill.
+- tapOn: "Cash"
+- extendedWaitUntil:
+    visible: "Switch wallet"
+    timeout: 10000
+- tapOn: "euro"
+- assertVisible: "EUR"

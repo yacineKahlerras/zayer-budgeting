@@ -18,7 +18,14 @@ export function ModalHeader({
 }) {
   return (
     <View style={styles.header}>
-      <Pressable style={styles.iconBtn} hitSlop={10} onPress={onCancel}>
+      {/* Icon-only buttons need explicit labels for screen readers. */}
+      <Pressable
+        style={styles.iconBtn}
+        hitSlop={10}
+        onPress={onCancel}
+        accessibilityRole="button"
+        accessibilityLabel="Cancel"
+      >
         <X size={22} color={Colors.text} />
       </Pressable>
       <Text style={styles.title}>{title}</Text>
@@ -27,6 +34,8 @@ export function ModalHeader({
         hitSlop={10}
         onPress={onSave}
         disabled={saving}
+        accessibilityRole="button"
+        accessibilityLabel="Save"
       >
         {saving ? (
           <ActivityIndicator size="small" color={Colors.accent} />

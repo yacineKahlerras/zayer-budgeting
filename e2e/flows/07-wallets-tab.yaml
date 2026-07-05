@@ -1,0 +1,22 @@
+# Wallets tab lists every wallet with its currency.
+appId: com.yacinekahlerras.ZayerBudgeting
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Zayer"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Open debugger to view warnings."
+    commands:
+      - tapOn:
+          point: "92%,92%"
+- tapOn: "Wallets"
+- extendedWaitUntil:
+    visible: "DZD"
+    timeout: 15000
+- assertVisible: "Cash"
+- assertVisible: "usd"
+- assertVisible: "euro"
+- assertVisible: "EUR"

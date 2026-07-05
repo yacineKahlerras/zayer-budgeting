@@ -1,0 +1,11 @@
+# Home loads: balance header, wallet pill, transaction list.
+appId: com.yacinekahlerras.ZayerBudgeting
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Zayer"
+    timeout: 30000
+- assertVisible: "BALANCE"
+- assertVisible: "Transactions"
+- assertVisible: "this month"

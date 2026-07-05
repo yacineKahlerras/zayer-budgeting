@@ -1,0 +1,31 @@
+# Settings → Categories management screen renders the tree.
+appId: com.yacinekahlerras.ZayerBudgeting
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Zayer"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Open debugger to view warnings."
+    commands:
+      - tapOn:
+          point: "92%,92%"
+# Settings gear (top-right).
+- tapOn:
+    point: "92%,8%"
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 15000
+- assertVisible: "Import data (CSV)"
+- assertVisible: "Export data (CSV)"
+- tapOn: "Categories"
+- extendedWaitUntil:
+    visible: "Food"
+    timeout: 15000
+- assertVisible: "Housing"
+# The Income group sits below the fold once imported categories exist.
+- scrollUntilVisible:
+    element:
+      text: "Income"
