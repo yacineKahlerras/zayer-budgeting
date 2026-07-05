@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   balanceSymbol: {
-    color: Colors.accent,
+    color: Colors.textMuted,
   },
   editBtn: {
     width: 36,
