@@ -335,14 +335,20 @@ export async function getTransactionsPage(
  * Stats screen picks a wallet; "all wallets" is offered only per-currency.
  */
 
+/** A period granularity for stats/budgets windows. */
+export type Period = "day" | "week" | "month" | "year";
+
 /** Build a [start, end) date window from a period + an anchor date. */
 export function periodRange(
-  period: "week" | "month" | "year",
+  period: Period,
   anchor: Date
 ): { start: Date; end: Date } {
   const y = anchor.getFullYear();
   const m = anchor.getMonth();
   const d = anchor.getDate();
+  if (period === "day") {
+    return { start: new Date(y, m, d), end: new Date(y, m, d + 1) };
+  }
   if (period === "year") {
     return { start: new Date(y, 0, 1), end: new Date(y + 1, 0, 1) };
   }
@@ -434,55 +440,6 @@ export async function getCategoryBreakdown(
     .sort((a, b) => b.amount - a.amount);
 }
 
-export type MonthlyTotal = {
-  year: number;
-  month: number; // 0-based
-  income: number;
-  expense: number;
-};
-
-/**
- * Income/expense per month for one wallet over the last `months` months
- * (oldest first), for the trend chart.
- */
-export async function getMonthlyTotals(
-  walletId: string,
-  months: number,
-  anchor: Date
-): Promise<MonthlyTotal[]> {
-  const start = new Date(anchor.getFullYear(), anchor.getMonth() - (months - 1), 1);
-  const end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1);
-
-  const rows = await db
-    .select({
-      amount: transactions.amount,
-      direction: transactions.direction,
-      date: transactions.date,
-    })
-    .from(transactions)
-    .where(scopeWhere(walletId, start, end));
-
-  // Bucket into months in JS (SQLite date math on ms-epoch is awkward).
-  const buckets = new Map<string, MonthlyTotal>();
-  for (let i = 0; i < months; i++) {
-    const dt = new Date(anchor.getFullYear(), anchor.getMonth() - (months - 1) + i, 1);
-    buckets.set(`${dt.getFullYear()}-${dt.getMonth()}`, {
-      year: dt.getFullYear(),
-      month: dt.getMonth(),
-      income: 0,
-      expense: 0,
-    });
-  }
-  for (const r of rows) {
-    const key = `${r.date.getFullYear()}-${r.date.getMonth()}`;
-    const b = buckets.get(key);
-    if (!b) continue;
-    if (r.direction === "income") b.income += r.amount;
-    else b.expense += r.amount;
-  }
-  return [...buckets.values()];
-}
-
 /* -------------------------------- Budgets -------------------------------- */
 /*
  * Budgets are monthly and per-currency. A budget is either scoped to one
@@ -491,10 +448,22 @@ export async function getMonthlyTotals(
  * matches the budget's currency (and category, when scoped).
  */
 
+/** Budget window granularity (custom is handled elsewhere; not offered yet). */
+export type BudgetPeriod = "day" | "month" | "year";
+
+/** Human label for how often a budget resets, e.g. "Monthly". */
+export function budgetPeriodLabel(period: string): string {
+  if (period === "day") return "Daily";
+  if (period === "year") return "Yearly";
+  return "Monthly";
+}
+
 export type BudgetInput = {
   name: string | null;
   amount: number; // cents
   categoryId: string | null; // null = overall cap
+  subcategoryId: string | null; // null = whole category (or overall)
+  period: BudgetPeriod;
   currency: string;
 };
 
@@ -504,9 +473,12 @@ export type BudgetWithProgress = {
   amount: number; // limit, cents
   categoryId: string | null;
   categoryName: string | null;
+  subcategoryId: string | null;
+  subcategoryName: string | null;
   icon: string | null;
+  period: BudgetPeriod;
   currency: string;
-  spent: number; // cents spent this month
+  spent: number; // cents spent in the current period
   remaining: number; // amount - spent (can be negative)
 };
 
@@ -517,8 +489,9 @@ export async function addBudget(input: BudgetInput): Promise<string> {
     name: input.name,
     amount: input.amount,
     categoryId: input.categoryId,
+    subcategoryId: input.subcategoryId,
     walletId: null,
-    period: "month",
+    period: input.period,
     currency: input.currency,
   });
   return id;
@@ -531,6 +504,8 @@ export async function updateBudget(id: string, input: BudgetInput) {
       name: input.name,
       amount: input.amount,
       categoryId: input.categoryId,
+      subcategoryId: input.subcategoryId,
+      period: input.period,
       currency: input.currency,
     })
     .where(eq(budgets.id, id));
@@ -545,26 +520,61 @@ export async function getBudget(id: string) {
   return row ?? null;
 }
 
+/** The concrete [start, end) window a budget's progress is measured over. */
+function budgetWindow(
+  b: { period: string; startDate: Date | null; endDate: Date | null },
+  anchor: Date
+): { start: Date; end: Date } {
+  if (b.period === "custom" && b.startDate && b.endDate) {
+    // endDate is inclusive in the UI; make the query bound exclusive.
+    const end = new Date(b.endDate);
+    end.setDate(end.getDate() + 1);
+    return { start: b.startDate, end };
+  }
+  const p: Period =
+    b.period === "day" || b.period === "week" || b.period === "year"
+      ? (b.period as Period)
+      : "month";
+  return periodRange(p, anchor);
+}
+
 /**
- * All budgets with their spent/remaining for the CURRENT month. Spending is
+ * All budgets with their spent/remaining for their CURRENT period. Spending is
  * matched by the budget's currency (via the transaction's wallet) and, when the
- * budget is category-scoped, by that category.
+ * budget is scoped, by its category or subcategory.
+ *
+ * Budgets can have different periods, so we pull the whole expense set once over
+ * the union window [earliest budget start, now] and bucket per budget in JS —
+ * one query regardless of budget count.
  */
 export async function listBudgetsWithProgress(
   anchor: Date
 ): Promise<BudgetWithProgress[]> {
   const rows = await db.select().from(budgets).orderBy(budgets.createdAt);
-  const { start, end } = periodRange("month", anchor);
+  if (rows.length === 0) return [];
 
-  // Pull this month's expenses once, with each transaction's currency and its
-  // effective category (subcategory's parent, else the direct category).
+  const windows = rows.map((b) => budgetWindow(b, anchor));
+  const windowsEnd = windows.reduce(
+    (mx, w) => (w.end > mx ? w.end : mx),
+    anchor
+  );
+  const windowsStart = windows.reduce(
+    (mn, w) => (w.start < mn ? w.start : mn),
+    windowsEnd
+  );
+
+  // Pull the union window's expenses once, with each transaction's currency,
+  // its effective category (subcategory's parent, else the direct category),
+  // its subcategory, and its date (so we can bucket per-budget window in JS).
   const spend = await db
     .select({
       amount: transactions.amount,
+      date: transactions.date,
       currency: wallets.currency,
       categoryId: sql<
         string | null
       >`coalesce(${subcategories.categoryId}, ${transactions.categoryId})`,
+      subcategoryId: transactions.subcategoryId,
     })
     .from(transactions)
     .innerJoin(wallets, eq(transactions.walletId, wallets.id))
@@ -572,28 +582,41 @@ export async function listBudgetsWithProgress(
     .where(
       and(
         eq(transactions.direction, "expense"),
-        gte(transactions.date, start),
-        lt(transactions.date, end)
+        gte(transactions.date, windowsStart),
+        lt(transactions.date, windowsEnd)
       )
     );
 
-  // Category names/icons for labeling.
+  // Category names/icons + subcategory names for labeling.
   const cats = await db.select().from(categories);
   const catById = new Map(cats.map((c) => [c.id, c]));
+  const subs = await db.select().from(subcategories);
+  const subById = new Map(subs.map((s) => [s.id, s]));
 
-  return rows.map((b) => {
+  return rows.map((b, i) => {
+    const { start, end } = windows[i];
     const spent = spend
+      .filter((s) => s.date >= start && s.date < end)
       .filter((s) => s.currency === b.currency)
       .filter((s) => (b.categoryId ? s.categoryId === b.categoryId : true))
+      .filter((s) =>
+        b.subcategoryId ? s.subcategoryId === b.subcategoryId : true
+      )
       .reduce((sum, s) => sum + s.amount, 0);
     const cat = b.categoryId ? catById.get(b.categoryId) : null;
+    const sub = b.subcategoryId ? subById.get(b.subcategoryId) : null;
+    const period: BudgetPeriod =
+      b.period === "day" || b.period === "year" ? b.period : "month";
     return {
       id: b.id,
       name: b.name,
       amount: b.amount,
       categoryId: b.categoryId,
       categoryName: cat?.name ?? null,
+      subcategoryId: b.subcategoryId,
+      subcategoryName: sub?.name ?? null,
       icon: cat?.icon ?? null,
+      period,
       currency: b.currency,
       spent,
       remaining: b.amount - spent,

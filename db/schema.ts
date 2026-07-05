@@ -120,10 +120,14 @@ export const budgets = sqliteTable("budgets", {
   categoryId: text("category_id").references(() => categories.id, {
     onDelete: "cascade",
   }),
+  /** Optional finer scope: when set, only this subcategory's spending counts. */
+  subcategoryId: text("subcategory_id").references(() => subcategories.id, {
+    onDelete: "cascade",
+  }),
   walletId: text("wallet_id").references(() => wallets.id, {
     onDelete: "cascade",
   }),
-  period: text("period", { enum: ["week", "month", "year", "custom"] })
+  period: text("period", { enum: ["day", "week", "month", "year", "custom"] })
     .notNull()
     .default("month"),
   /** Only used when period = "custom". */

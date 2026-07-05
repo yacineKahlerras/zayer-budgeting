@@ -4,11 +4,13 @@ import {
   ChevronLeft,
   ChevronRight,
   SlidersHorizontal,
+  Tag,
 } from "lucide-react-native";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,27 +21,23 @@ import Svg, { Circle } from "react-native-svg";
 
 import { Screen, ScreenTitle } from "@/components/ui/screen";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import {
-  ALL_WALLETS,
-  WalletSelector,
-} from "@/components/ui/wallet-selector";
+import { WalletPickerDialog } from "@/components/ui/wallet-picker-dialog";
 import { Colors } from "@/constants/theme";
 import {
   getCategoryBreakdown,
-  getMonthlyTotals,
   getPeriodSummary,
   listWalletsWithBalances,
   periodRange,
   type CategorySlice,
-  type MonthlyTotal,
+  type Period,
   type PeriodSummary,
   type WalletWithBalance,
 } from "@/db/queries";
 import { categoryIcon } from "@/utils/category-icon";
 import { formatCents, monthShort } from "@/utils/format";
 
-type Period = "week" | "month" | "year";
 const PERIOD_OPTIONS = [
+  { value: "day" as const, label: "Day" },
   { value: "week" as const, label: "Week" },
   { value: "month" as const, label: "Month" },
   { value: "year" as const, label: "Year" },
@@ -65,7 +63,19 @@ const SLICE_COLORS = [
   "#94A3B8",
 ];
 
+function isToday(d: Date, now: Date): boolean {
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
 function rangeLabel(period: Period, anchor: Date): string {
+  if (period === "day") {
+    if (isToday(anchor, new Date())) return "Today";
+    return `${monthShort(anchor.getMonth())} ${anchor.getDate()}, ${anchor.getFullYear()}`;
+  }
   if (period === "year") return `${anchor.getFullYear()}`;
   if (period === "month") {
     return `${monthShort(anchor.getMonth())} ${anchor.getFullYear()}`;
@@ -81,6 +91,11 @@ function rangeLabel(period: Period, anchor: Date): string {
  * so month/year navigation never skips a short month (e.g. Jan 31 → Feb).
  */
 function shiftAnchor(period: Period, anchor: Date, dir: -1 | 1): Date {
+  if (period === "day") {
+    const d = new Date(anchor);
+    d.setDate(d.getDate() + dir);
+    return d;
+  }
   if (period === "week") {
     const d = new Date(anchor);
     d.setDate(d.getDate() + dir * 7);
@@ -108,7 +123,6 @@ export default function StatsScreen() {
 
   const [summary, setSummary] = useState<PeriodSummary | null>(null);
   const [breakdown, setBreakdown] = useState<CategorySlice[]>([]);
-  const [monthly, setMonthly] = useState<MonthlyTotal[]>([]);
   const [loading, setLoading] = useState(true);
   // Visualization options, tucked behind the sliders button.
   const [breakdownView, setBreakdownView] = useState<BreakdownView>("bars");
@@ -116,6 +130,40 @@ export default function StatsScreen() {
 
   const currency =
     wallets.find((w) => w.id === selectedWallet)?.currency ?? "USD";
+
+  // Step one period back (right swipe) or forward (left swipe). Forward is
+  // clamped so you can't page past the current period.
+  const step = useCallback(
+    (dir: -1 | 1) => {
+      setAnchor((a) => {
+        if (dir === 1 && !canStepForward(period, a, new Date())) return a;
+        return shiftAnchor(period, a, dir);
+      });
+    },
+    [period]
+  );
+
+  // The PanResponder is created once, so its callbacks would capture the first
+  // `step` (bound to the initial period). Keep a ref pointing at the latest
+  // `step` and call through it, so swiping always uses the current period.
+  const stepRef = useRef(step);
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
+
+  // Horizontal swipe over the content pages between periods: swipe right to go
+  // to the previous period, swipe left for the next. Captured only for clearly
+  // horizontal drags so vertical scrolling still works.
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      onPanResponderRelease: (_e, g) => {
+        if (g.dx > 50) stepRef.current(-1);
+        else if (g.dx < -50) stepRef.current(1);
+      },
+    })
+  ).current;
 
   // Load wallets; default the scope to the first wallet.
   useFocusEffect(
@@ -125,9 +173,7 @@ export default function StatsScreen() {
         if (cancelled) return;
         setWallets(w);
         setSelectedWallet((cur) =>
-          cur && (cur === ALL_WALLETS || w.some((x) => x.id === cur))
-            ? cur
-            : w[0]?.id ?? ""
+          cur && w.some((x) => x.id === cur) ? cur : w[0]?.id ?? ""
         );
       });
       return () => {
@@ -147,16 +193,13 @@ export default function StatsScreen() {
       setLoading(true);
       const { start, end } = periodRange(period, anchor);
       (async () => {
-        const [s, b, m] = await Promise.all([
+        const [s, b] = await Promise.all([
           getPeriodSummary(selectedWallet, start, end),
           getCategoryBreakdown(selectedWallet, start, end),
-          // Trend is always the 6 months up to now, independent of navigation.
-          getMonthlyTotals(selectedWallet, 6, new Date()),
         ]);
         if (cancelled) return;
         setSummary(s);
         setBreakdown(b);
-        setMonthly(m);
         setLoading(false);
       })();
       return () => {
@@ -168,10 +211,6 @@ export default function StatsScreen() {
   const totalExpense = useMemo(
     () => breakdown.reduce((sum, s) => sum + s.amount, 0),
     [breakdown]
-  );
-  const maxMonthly = useMemo(
-    () => Math.max(1, ...monthly.map((m) => Math.max(m.income, m.expense))),
-    [monthly]
   );
 
   if (wallets.length === 0) {
@@ -195,17 +234,17 @@ export default function StatsScreen() {
       </View>
 
       <View style={styles.selectorWrap}>
-        <WalletSelector
+        <WalletPickerDialog
           wallets={wallets}
           selected={selectedWallet}
           onSelect={setSelectedWallet}
-          includeAll={false}
         />
       </View>
 
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        {...panResponder.panHandlers}
       >
         {/* Period toggle */}
         <View style={styles.periodToggle}>
@@ -220,19 +259,16 @@ export default function StatsScreen() {
           />
         </View>
 
-        {/* Range stepper */}
+        {/* Range stepper — also swipe the content left/right to navigate */}
         <View style={styles.stepper}>
-          <Pressable
-            hitSlop={10}
-            onPress={() => setAnchor((a) => shiftAnchor(period, a, -1))}
-          >
+          <Pressable hitSlop={10} onPress={() => step(-1)}>
             <ChevronLeft size={22} color={Colors.textMuted} />
           </Pressable>
           <Text style={styles.rangeLabel}>{rangeLabel(period, anchor)}</Text>
           <Pressable
             hitSlop={10}
             disabled={!canStepForward(period, anchor, new Date())}
-            onPress={() => setAnchor((a) => shiftAnchor(period, a, 1))}
+            onPress={() => step(1)}
           >
             <ChevronRight
               size={22}
@@ -290,7 +326,15 @@ export default function StatsScreen() {
               </Pressable>
             </View>
             {breakdown.length === 0 ? (
-              <Text style={styles.emptyInline}>No spending this period.</Text>
+              <View style={styles.breakdownEmpty}>
+                <View style={styles.breakdownEmptyIcon}>
+                  <Tag size={18} color={Colors.textMuted} />
+                </View>
+                <Text style={styles.breakdownEmptyTitle}>Nothing spent yet</Text>
+                <Text style={styles.breakdownEmptyText}>
+                  Spending in this period will appear here.
+                </Text>
+              </View>
             ) : breakdownView === "donut" ? (
               <DonutBreakdown
                 breakdown={breakdown}
@@ -364,50 +408,6 @@ export default function StatsScreen() {
                 })}
               </View>
             )}
-
-            {/* Monthly trend */}
-            <Text style={styles.sectionLabel}>Last 6 months</Text>
-            <View style={styles.trend}>
-              {monthly.map((m) => (
-                <View key={`${m.year}-${m.month}`} style={styles.trendCol}>
-                  <View style={styles.trendBars}>
-                    <View
-                      style={[
-                        styles.trendBar,
-                        {
-                          height: `${(m.income / maxMonthly) * 100}%`,
-                          backgroundColor: Colors.positive,
-                        },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.trendBar,
-                        {
-                          height: `${(m.expense / maxMonthly) * 100}%`,
-                          backgroundColor: Colors.negative,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.trendLabel}>{monthShort(m.month)}</Text>
-                </View>
-              ))}
-            </View>
-            <View style={styles.legend}>
-              <View style={styles.legendItem}>
-                <View
-                  style={[styles.legendDot, { backgroundColor: Colors.positive }]}
-                />
-                <Text style={styles.legendText}>Income</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View
-                  style={[styles.legendDot, { backgroundColor: Colors.negative }]}
-                />
-                <Text style={styles.legendText}>Expense</Text>
-              </View>
-            </View>
           </>
         )}
       </ScrollView>
@@ -540,7 +540,8 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   selectorWrap: {
-    marginTop: 8,
+    alignItems: "center",
+    marginTop: 10,
     marginBottom: 4,
   },
   content: {
@@ -746,10 +747,32 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontWeight: "600",
   },
-  emptyInline: {
+  breakdownEmpty: {
+    alignItems: "center",
+    paddingTop: 44,
+    paddingBottom: 24,
+  },
+  breakdownEmptyIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 12,
+  },
+  breakdownEmptyTitle: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  breakdownEmptyText: {
     color: Colors.textMuted,
-    fontSize: 14,
-    marginBottom: 24,
+    fontSize: 13,
+    marginTop: 4,
+    textAlign: "center",
   },
   breakdown: {
     gap: 16,
@@ -806,54 +829,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 4,
   },
-  trend: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    height: 140,
-    marginBottom: 12,
-  },
-  trendCol: {
-    flex: 1,
-    alignItems: "center",
-    height: "100%",
-    justifyContent: "flex-end",
-  },
-  trendBars: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "center",
-    gap: 3,
-  },
-  trendBar: {
-    width: 10,
-    borderRadius: 3,
-    minHeight: 2,
-  },
-  trendLabel: {
-    color: Colors.textMuted,
-    fontSize: 11,
-    marginTop: 6,
-  },
-  legend: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 20,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
   legendDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-  },
-  legendText: {
-    color: Colors.textMuted,
-    fontSize: 12,
   },
   empty: {
     alignItems: "center",

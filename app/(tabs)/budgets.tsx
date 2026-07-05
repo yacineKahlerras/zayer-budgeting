@@ -6,11 +6,12 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Screen, ScreenTitle } from "@/components/ui/screen";
 import { Colors } from "@/constants/theme";
 import {
+  budgetPeriodLabel,
   listBudgetsWithProgress,
   type BudgetWithProgress,
 } from "@/db/queries";
 import { categoryIcon } from "@/utils/category-icon";
-import { formatCents, monthShort } from "@/utils/format";
+import { formatCents } from "@/utils/format";
 
 export default function BudgetsScreen() {
   const [budgets, setBudgets] = useState<BudgetWithProgress[]>([]);
@@ -27,15 +28,12 @@ export default function BudgetsScreen() {
     }, [])
   );
 
-  const now = new Date();
-  const monthLabel = `${monthShort(now.getMonth())} ${now.getFullYear()}`;
-
   return (
     <Screen>
       <View style={styles.header}>
         <View>
           <ScreenTitle>Budgets</ScreenTitle>
-          <Text style={styles.subtitle}>{monthLabel}</Text>
+          <Text style={styles.subtitle}>Spending limits</Text>
         </View>
         <Pressable
           style={styles.addBtn}
@@ -78,7 +76,14 @@ function BudgetCard({ budget: b }: { budget: BudgetWithProgress }) {
     : pct > 0.85
       ? "#F59E0B"
       : Colors.accent;
-  const label = b.categoryName ?? b.name ?? "Overall";
+  // Most specific scope wins: subcategory > category > custom name > "Overall".
+  const label =
+    b.subcategoryName ?? b.categoryName ?? b.name ?? "Overall";
+  // Meta carries context the title dropped: when the title is a subcategory,
+  // lead with its parent category so "Restaurant" reads as "Food · …".
+  const parentContext =
+    b.subcategoryName && b.categoryName ? `${b.categoryName} · ` : "";
+  const periodLabel = budgetPeriodLabel(b.period);
 
   return (
     <Pressable
@@ -92,7 +97,13 @@ function BudgetCard({ budget: b }: { budget: BudgetWithProgress }) {
           <View style={styles.icon}>
             <Icon size={16} color={Colors.textMuted} />
           </View>
-          <Text style={styles.cardName}>{label}</Text>
+          <View style={styles.cardTitleWrap}>
+            <Text style={styles.cardName}>{label}</Text>
+            <Text style={styles.cardMeta}>
+              {parentContext}
+              {periodLabel} · {b.currency}
+            </Text>
+          </View>
         </View>
         <Text style={[styles.cardRemaining, over && { color: Colors.negative }]}>
           {over
@@ -176,10 +187,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
+  cardTitleWrap: {
+    flexShrink: 1,
+  },
   cardName: {
     color: Colors.text,
     fontSize: 15,
     fontWeight: "600",
+  },
+  cardMeta: {
+    color: Colors.textMuted,
+    fontSize: 11.5,
+    marginTop: 1,
   },
   cardRemaining: {
     color: Colors.textMuted,

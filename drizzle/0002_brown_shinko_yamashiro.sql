@@ -1,0 +1,1 @@
+ALTER TABLE `budgets` ADD `subcategory_id` text REFERENCES subcategories(id);

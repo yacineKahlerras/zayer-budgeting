@@ -15,6 +15,13 @@
       "when": 1783177967902,
       "tag": "0001_classy_vin_gonzales",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1783244043033,
+      "tag": "0002_brown_shinko_yamashiro",
+      "breakpoints": true
     }
   ]
 }
