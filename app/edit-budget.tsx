@@ -1,10 +1,15 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { Check, ChevronDown, ChevronRight, Wallet } from "lucide-react-native";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  LayoutAnimation,
+  Platform,
+  Pressable,
   StyleSheet,
   Text,
+  UIManager,
   View,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
@@ -27,7 +32,16 @@ import {
   type BudgetPeriod,
   type CategoryWithSubs,
 } from "@/db/queries";
+import { categoryIcon } from "@/utils/category-icon";
 import { toCents } from "@/utils/format";
+
+// Enable LayoutAnimation on Android.
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // Sentinel for the "overall" (no category) budget scope.
 const OVERALL = "__overall__";
@@ -46,6 +60,10 @@ export default function EditBudget() {
   const [period, setPeriod] = useState<BudgetPeriod>("month");
   const [categoryId, setCategoryId] = useState<string>(OVERALL);
   const [subcategoryId, setSubcategoryId] = useState<string | null>(null);
+  /** The scope picker is collapsed by default; the summary row opens it. */
+  const [categoryListOpen, setCategoryListOpen] = useState(false);
+  /** Which category's subcategory dropdown is unfolded. */
+  const [openCategoryId, setOpenCategoryId] = useState<string | null>(null);
   const [currency, setCurrency] = useState("USD");
   const [categories, setCategories] = useState<CategoryWithSubs[]>([]);
   const [currencies, setCurrencies] = useState<string[]>(["USD"]);
@@ -70,6 +88,13 @@ export default function EditBudget() {
         setAmount((budget.amount / 100).toFixed(2));
         setCategoryId(budget.categoryId ?? OVERALL);
         setSubcategoryId(budget.subcategoryId ?? null);
+        // Reveal the picker up front when editing a scoped budget, with the
+        // chosen category's subcategory dropdown unfolded — same as editing a
+        // categorized transaction.
+        if (budget.categoryId) {
+          setCategoryListOpen(true);
+          setOpenCategoryId(budget.categoryId);
+        }
         // Custom-period budgets fall back to monthly in this editor.
         setPeriod(
           budget.period === "day" || budget.period === "year"
@@ -96,21 +121,47 @@ export default function EditBudget() {
     };
   }, [id]);
 
-  /** Pick a top-level category (or Overall), clearing any subcategory refinement. */
-  function selectCategory(next: string) {
-    setCategoryId(next);
-    setSubcategoryId(null);
+  /** Fold/unfold the whole scope picker. */
+  function toggleCategoryList() {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setCategoryListOpen((v) => !v);
   }
 
-  /** Toggle a subcategory refinement; picking the same one again clears it. */
-  function selectSubcategory(subId: string) {
+  /** Cap all spending: no category, no subcategory, fold any open dropdown. */
+  function selectOverall() {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setCategoryId(OVERALL);
+    setSubcategoryId(null);
+    setOpenCategoryId(null);
+  }
+
+  /** Tapping a category selects it outright (no subcategory needed) and
+   *  reveals its subcategories to optionally refine. Tapping the selected
+   *  category again just folds/unfolds its subcategory list. */
+  function selectCategory(catId: string) {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    if (categoryId === catId) {
+      setOpenCategoryId((cur) => (cur === catId ? null : catId));
+      return;
+    }
+    setCategoryId(catId);
+    setSubcategoryId(null);
+    setOpenCategoryId(catId);
+  }
+
+  /** Tapping a subcategory refines the selection; tapping it again clears the
+   *  refinement but keeps the category. */
+  function selectSubcategory(catId: string, subId: string) {
+    setCategoryId(catId);
     setSubcategoryId((cur) => (cur === subId ? null : subId));
   }
 
-  const activeCategory =
-    categoryId === OVERALL
-      ? null
-      : categories.find((c) => c.id === categoryId) ?? null;
+  /** Name shown in the collapsed summary: subcategory > category > Overall. */
+  const selectionName = useMemo(() => {
+    const cat = categories.find((c) => c.id === categoryId);
+    const sub = cat?.subs.find((s) => s.id === subcategoryId);
+    return sub?.name ?? cat?.name ?? "Overall";
+  }, [categories, categoryId, subcategoryId]);
 
   async function handleSave() {
     const cents = toCents(amount);
@@ -221,42 +272,132 @@ export default function EditBudget() {
           </>
         )}
 
-        {/* Scope: category, then optional subcategory. No category = Overall. */}
+        {/* Scope — collapsed by default; the summary row opens the picker.
+            Same rows-and-dropdown pattern as the add-transaction screen, plus
+            an "Overall" row. No category = overall cap. */}
         <Text style={[styles.label, styles.section]}>Applies to</Text>
-        <View style={styles.chips}>
-          <Chip
-            label="Overall"
-            selected={categoryId === OVERALL}
-            onPress={() => selectCategory(OVERALL)}
+        <Pressable style={styles.categorySummary} onPress={toggleCategoryList}>
+          <Text style={styles.categorySummaryText} numberOfLines={1}>
+            {selectionName}
+          </Text>
+          <ChevronDown
+            size={18}
+            color={Colors.textMuted}
+            style={{
+              transform: [{ rotate: categoryListOpen ? "180deg" : "0deg" }],
+            }}
           />
-          {categories.map((c) => (
-            <Chip
-              key={c.id}
-              label={c.name}
-              selected={categoryId === c.id}
-              onPress={() => selectCategory(c.id)}
-            />
-          ))}
-        </View>
+        </Pressable>
 
-        {/* Subcategory refinement, only when a category with subs is chosen.
-            Same chip pattern as the categories above, one nesting level in. */}
-        {activeCategory && activeCategory.subs.length > 0 && (
-          <>
-            <Text style={[styles.label, styles.subSection]}>
-              Subcategory · optional
-            </Text>
-            <View style={styles.chips}>
-              {activeCategory.subs.map((s) => (
-                <Chip
-                  key={s.id}
-                  label={s.name}
-                  selected={s.id === subcategoryId}
-                  onPress={() => selectSubcategory(s.id)}
+        {categoryListOpen && (
+          <View style={styles.rows}>
+            {/* Overall — cap across all categories */}
+            <Pressable style={styles.catRow} onPress={selectOverall}>
+              <View
+                style={[
+                  styles.catIcon,
+                  categoryId === OVERALL && styles.catIconSelected,
+                ]}
+              >
+                <Wallet
+                  size={17}
+                  color={
+                    categoryId === OVERALL ? Colors.accent : Colors.textMuted
+                  }
                 />
-              ))}
-            </View>
-          </>
+              </View>
+              <Text
+                style={[
+                  styles.catName,
+                  categoryId === OVERALL && styles.catNameSelected,
+                ]}
+              >
+                Overall
+              </Text>
+              {categoryId === OVERALL && (
+                <Check size={16} color={Colors.accent} />
+              )}
+            </Pressable>
+
+            {categories.map((c, i) => {
+              const Icon = categoryIcon(c.icon);
+              const isLast = i === categories.length - 1;
+              const isOpen = c.id === openCategoryId;
+              const isSelected = c.id === categoryId;
+              return (
+                <View key={c.id}>
+                  <Pressable
+                    style={[
+                      styles.catRow,
+                      isLast && !isOpen && styles.catRowLast,
+                    ]}
+                    onPress={() => selectCategory(c.id)}
+                  >
+                    <View
+                      style={[
+                        styles.catIcon,
+                        isSelected && styles.catIconSelected,
+                      ]}
+                    >
+                      <Icon
+                        size={17}
+                        color={isSelected ? Colors.accent : Colors.textMuted}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.catName,
+                        isSelected && styles.catNameSelected,
+                      ]}
+                    >
+                      {c.name}
+                    </Text>
+                    {isSelected && <Check size={16} color={Colors.accent} />}
+                    {c.subs.length > 0 && (
+                      <ChevronRight
+                        size={16}
+                        color={Colors.textMuted}
+                        style={{
+                          transform: [{ rotate: isOpen ? "90deg" : "0deg" }],
+                        }}
+                      />
+                    )}
+                  </Pressable>
+
+                  {/* Subcategories as slim indented rows */}
+                  {isOpen && (
+                    <View style={styles.subList}>
+                      {c.subs.map((s, si) => {
+                        const subSelected = s.id === subcategoryId;
+                        return (
+                          <Pressable
+                            key={s.id}
+                            style={[
+                              styles.subRow,
+                              si === c.subs.length - 1 && styles.subRowLast,
+                            ]}
+                            onPress={() => selectSubcategory(c.id, s.id)}
+                          >
+                            <Text
+                              style={[
+                                styles.subName,
+                                subSelected && styles.subNameSelected,
+                              ]}
+                            >
+                              {s.name}
+                            </Text>
+                            {subSelected && (
+                              <Check size={15} color={Colors.accent} />
+                            )}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
         )}
 
         {editing && <DeleteRow label="Delete budget" onPress={handleDelete} />}
@@ -297,8 +438,88 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
-  // A refinement of "Applies to" — a gap, not a full section break.
-  subSection: {
-    marginTop: 16,
+
+  /* Scope picker — mirrors the add-transaction category picker */
+  categorySummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
+  },
+  categorySummaryText: {
+    flex: 1,
+    fontSize: 14.5,
+    fontWeight: "600",
+    color: Colors.text,
+  },
+  rows: {
+    marginTop: 8,
+  },
+  catRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 13,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: Colors.border,
+  },
+  catRowLast: {
+    borderBottomWidth: 0,
+  },
+  catIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  catIconSelected: {
+    borderColor: Colors.accent,
+    backgroundColor: Colors.cardElevated,
+  },
+  catName: {
+    flex: 1,
+    fontSize: 14.5,
+    fontWeight: "500",
+    color: Colors.textMuted,
+  },
+  catNameSelected: {
+    color: Colors.text,
+  },
+  subList: {
+    marginLeft: 47,
+    marginBottom: 8,
+    borderLeftWidth: 1,
+    borderColor: Colors.border,
+  },
+  subRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingLeft: 14,
+    paddingRight: 4,
+    borderBottomWidth: 1,
+    borderColor: Colors.border,
+  },
+  subRowLast: {
+    borderBottomWidth: 0,
+  },
+  subName: {
+    fontSize: 14,
+    color: Colors.textMuted,
+  },
+  subNameSelected: {
+    color: Colors.text,
+    fontWeight: "600",
   },
 });
