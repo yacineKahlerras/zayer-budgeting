@@ -46,3 +46,4 @@ screens
 .claude
 .drive/
 report_*.csv
+android/local.properties
