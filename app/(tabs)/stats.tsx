@@ -9,6 +9,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Dimensions,
   Modal,
   PanResponder,
   Pressable,
@@ -42,6 +44,9 @@ const PERIOD_OPTIONS = [
   { value: "month" as const, label: "Month" },
   { value: "year" as const, label: "Year" },
 ];
+
+/** Distance the period content travels when a swipe pages it off-screen. */
+const SCREEN_W = Dimensions.get("window").width;
 
 /** How the spending-by-category section is visualized. */
 type BreakdownView = "bars" | "donut" | "list";
@@ -144,24 +149,75 @@ export default function StatsScreen() {
   );
 
   // The PanResponder is created once, so its callbacks would capture the first
-  // `step` (bound to the initial period). Keep a ref pointing at the latest
-  // `step` and call through it, so swiping always uses the current period.
+  // `step` (bound to the initial period). Keep refs pointing at the latest
+  // `step` and forward-clamp, so swiping always uses the current period.
   const stepRef = useRef(step);
   useEffect(() => {
     stepRef.current = step;
   }, [step]);
+  const canForwardRef = useRef(true);
+  useEffect(() => {
+    canForwardRef.current = canStepForward(period, anchor, new Date());
+  }, [period, anchor]);
 
-  // Horizontal swipe over the content pages between periods: swipe right to go
-  // to the previous period, swipe left for the next. Captured only for clearly
-  // horizontal drags so vertical scrolling still works.
+  // Horizontal position of the period content. It follows the finger during a
+  // drag, slides off-screen and back in when a swipe lands, and springs back
+  // when it doesn't — so paging between periods reads as a real swipe.
+  const slideX = useRef(new Animated.Value(0)).current;
+  const slideOpacity = slideX.interpolate({
+    inputRange: [-SCREEN_W, 0, SCREEN_W],
+    outputRange: [0.2, 1, 0.2],
+  });
+
+  /** Slide the old period out, step, then slide the new period in. */
+  const pageTo = useCallback(
+    (dir: -1 | 1) => {
+      // dir -1 = previous (content exits right); dir 1 = next (exits left).
+      Animated.timing(slideX, {
+        toValue: dir === -1 ? SCREEN_W : -SCREEN_W,
+        duration: 150,
+        useNativeDriver: true,
+      }).start(() => {
+        stepRef.current(dir);
+        slideX.setValue(dir === -1 ? -SCREEN_W : SCREEN_W);
+        Animated.spring(slideX, {
+          toValue: 0,
+          tension: 120,
+          friction: 16,
+          useNativeDriver: true,
+        }).start();
+      });
+    },
+    [slideX]
+  );
+
+  const settleBack = useCallback(() => {
+    Animated.spring(slideX, {
+      toValue: 0,
+      tension: 120,
+      friction: 14,
+      useNativeDriver: true,
+    }).start();
+  }, [slideX]);
+
+  // Swipe right for the previous period, left for the next. Captured only for
+  // clearly horizontal drags so vertical scrolling still works.
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) =>
         Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
-      onPanResponderRelease: (_e, g) => {
-        if (g.dx > 50) stepRef.current(-1);
-        else if (g.dx < -50) stepRef.current(1);
+      onPanResponderMove: (_e, g) => {
+        // Rubber-band when paging past the current period isn't allowed.
+        const dx =
+          g.dx < 0 && !canForwardRef.current ? g.dx / 3 : g.dx;
+        slideX.setValue(dx);
       },
+      onPanResponderRelease: (_e, g) => {
+        if (g.dx > 50) pageTo(-1);
+        else if (g.dx < -50 && canForwardRef.current) pageTo(1);
+        else settleBack();
+      },
+      onPanResponderTerminate: () => settleBack(),
     })
   ).current;
 
@@ -259,16 +315,17 @@ export default function StatsScreen() {
           />
         </View>
 
-        {/* Range stepper — also swipe the content left/right to navigate */}
+        {/* Range stepper — also swipe the content left/right to navigate.
+            The chevrons page with the same slide animation as a swipe. */}
         <View style={styles.stepper}>
-          <Pressable hitSlop={10} onPress={() => step(-1)}>
+          <Pressable hitSlop={10} onPress={() => pageTo(-1)}>
             <ChevronLeft size={22} color={Colors.textMuted} />
           </Pressable>
           <Text style={styles.rangeLabel}>{rangeLabel(period, anchor)}</Text>
           <Pressable
             hitSlop={10}
             disabled={!canStepForward(period, anchor, new Date())}
-            onPress={() => step(1)}
+            onPress={() => pageTo(1)}
           >
             <ChevronRight
               size={22}
@@ -281,6 +338,12 @@ export default function StatsScreen() {
           </Pressable>
         </View>
 
+        <Animated.View
+          style={{
+            transform: [{ translateX: slideX }],
+            opacity: slideOpacity,
+          }}
+        >
         {loading ? (
           <ActivityIndicator color={Colors.accent} style={styles.loader} />
         ) : (
@@ -410,6 +473,7 @@ export default function StatsScreen() {
             )}
           </>
         )}
+        </Animated.View>
       </ScrollView>
 
       {/* View options */}
