@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   },
   inputRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "baseline",
     gap: 6,
     marginTop: 18,
     paddingBottom: 10,
@@ -178,8 +178,8 @@ const styles = StyleSheet.create({
   },
   symbol: {
     color: Colors.textMuted,
-    fontSize: 28,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "600",
   },
   input: {
     flex: 1,
