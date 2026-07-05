@@ -7,6 +7,67 @@ import type { WalletWithBalance } from "@/db/queries";
 import { formatCents } from "@/utils/format";
 
 /**
+ * The centered "Switch wallet" dialog on its own, for screens that provide
+ * their own trigger (e.g. the add-transaction wallet row).
+ */
+export function WalletMenuModal({
+  visible,
+  wallets,
+  selected,
+  onSelect,
+  onClose,
+}: {
+  visible: boolean;
+  wallets: WalletWithBalance[];
+  selected: string | null;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <View style={styles.menu}>
+          <Text style={styles.menuTitle}>Switch wallet</Text>
+          {wallets.map((w, i) => {
+            const active = w.id === selected;
+            return (
+              <Pressable
+                key={w.id}
+                style={[
+                  styles.menuRow,
+                  i === wallets.length - 1 && styles.menuRowLast,
+                ]}
+                onPress={() => {
+                  onClose();
+                  onSelect(w.id);
+                }}
+              >
+                <View style={styles.menuInfo}>
+                  <Text
+                    style={[styles.menuName, active && styles.menuNameActive]}
+                  >
+                    {w.name}
+                  </Text>
+                  <Text style={styles.menuBalance}>
+                    {formatCents(w.balance, w.currency)} · {w.currency}
+                  </Text>
+                </View>
+                {active && <Check size={16} color={Colors.accent} />}
+              </Pressable>
+            );
+          })}
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+/**
  * A centered wallet switcher: a quiet pill trigger that opens a centered dialog
  * of wallets to pick from — the same interaction as the home balance header.
  * Shared by any screen that scopes to a single wallet (e.g. Stats).
@@ -39,46 +100,13 @@ export function WalletPickerDialog({
         {canSwitch && <ChevronDown size={14} color={Colors.textMuted} />}
       </Pressable>
 
-      <Modal
+      <WalletMenuModal
         visible={open}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setOpen(false)}
-      >
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
-          <View style={styles.menu}>
-            <Text style={styles.menuTitle}>Switch wallet</Text>
-            {wallets.map((w, i) => {
-              const active = w.id === current?.id;
-              return (
-                <Pressable
-                  key={w.id}
-                  style={[
-                    styles.menuRow,
-                    i === wallets.length - 1 && styles.menuRowLast,
-                  ]}
-                  onPress={() => {
-                    setOpen(false);
-                    onSelect(w.id);
-                  }}
-                >
-                  <View style={styles.menuInfo}>
-                    <Text
-                      style={[styles.menuName, active && styles.menuNameActive]}
-                    >
-                      {w.name}
-                    </Text>
-                    <Text style={styles.menuBalance}>
-                      {formatCents(w.balance, w.currency)} · {w.currency}
-                    </Text>
-                  </View>
-                  {active && <Check size={16} color={Colors.accent} />}
-                </Pressable>
-              );
-            })}
-          </View>
-        </Pressable>
-      </Modal>
+        wallets={wallets}
+        selected={current?.id ?? null}
+        onSelect={onSelect}
+        onClose={() => setOpen(false)}
+      />
     </View>
   );
 }

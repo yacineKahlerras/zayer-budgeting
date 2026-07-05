@@ -27,17 +27,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AmountInput } from "@/components/ui/amount-input";
 import { DeleteRow } from "@/components/ui/delete-row";
 import { ModalHeader } from "@/components/ui/modal-header";
+import { WalletMenuModal } from "@/components/ui/wallet-picker-dialog";
 import { Colors } from "@/constants/theme";
 import {
   addTransaction,
   deleteTransaction,
   getTransaction,
   listCategoryTree,
-  listWallets,
+  listWalletsWithBalances,
   updateTransaction,
   type CategoryWithSubs,
+  type WalletWithBalance,
 } from "@/db/queries";
-import type { Wallet } from "@/db/schema";
 import { categoryIcon } from "@/utils/category-icon";
 import { monthShort, toCents } from "@/utils/format";
 
@@ -73,8 +74,9 @@ export default function AddTransaction() {
 
   const [direction, setDirection] = useState<Direction>("expense");
   const [amount, setAmount] = useState("");
-  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [wallets, setWallets] = useState<WalletWithBalance[]>([]);
   const [walletIndex, setWalletIndex] = useState(0);
+  const [walletMenuOpen, setWalletMenuOpen] = useState(false);
   const [tree, setTree] = useState<CategoryWithSubs[]>([]);
   const [openCategoryId, setOpenCategoryId] = useState<string | null>(null);
   /** The whole category picker is collapsed by default; the summary row opens it. */
@@ -96,7 +98,7 @@ export default function AddTransaction() {
   // preselect the wallet passed from the home screen (if any).
   useEffect(() => {
     let cancelled = false;
-    listWallets().then((w) => {
+    listWalletsWithBalances().then((w) => {
       if (cancelled) return;
       setWallets(w);
       if (!id && presetWalletId) {
@@ -226,9 +228,16 @@ export default function AddTransaction() {
     setSubcategoryId((cur) => (cur === subId ? null : subId));
   }
 
-  function cycleWallet() {
+  /** Open the wallet dialog — even with a single wallet, so the choice is
+   *  always visible rather than a blind tap-to-cycle. */
+  function openWalletMenu() {
     if (wallets.length === 0) return;
-    setWalletIndex((i) => (i + 1) % wallets.length);
+    setWalletMenuOpen(true);
+  }
+
+  function selectWallet(id: string) {
+    const i = wallets.findIndex((w) => w.id === id);
+    if (i >= 0) setWalletIndex(i);
   }
 
   async function handleSave() {
@@ -369,8 +378,8 @@ export default function AddTransaction() {
           </Pressable>
         </View>
 
-        {/* Wallet */}
-        <Pressable style={styles.walletRow} onPress={cycleWallet}>
+        {/* Wallet — opens the wallet dialog, like the home balance header */}
+        <Pressable style={styles.walletRow} onPress={openWalletMenu}>
           <Text style={styles.walletKey}>Wallet</Text>
           <View style={styles.walletValue}>
             <Text style={styles.walletValueText}>
@@ -551,6 +560,14 @@ export default function AddTransaction() {
           }}
         />
       )}
+
+      <WalletMenuModal
+        visible={walletMenuOpen}
+        wallets={wallets}
+        selected={wallet?.id ?? null}
+        onSelect={selectWallet}
+        onClose={() => setWalletMenuOpen(false)}
+      />
     </SafeAreaView>
   );
 }
