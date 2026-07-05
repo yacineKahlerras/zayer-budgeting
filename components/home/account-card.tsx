@@ -16,7 +16,7 @@ import {
   type PeriodSummary,
   type WalletWithBalance,
 } from "@/db/queries";
-import { formatCents } from "@/utils/format";
+import { currencySymbol, formatCents } from "@/utils/format";
 
 /**
  * The balance header. Modern fintech treatment: the number floats directly on
@@ -82,7 +82,12 @@ export function AccountCard({
           numberOfLines={1}
           adjustsFontSizeToFit
         >
-          {formatCents(selected?.balance ?? 0, selected?.currency)}
+          <Text style={styles.balanceSymbol}>
+            {currencySymbol(selected?.currency ?? "USD")}
+          </Text>
+          {formatCents(selected?.balance ?? 0, selected?.currency).slice(
+            currencySymbol(selected?.currency ?? "USD").length
+          )}
         </Text>
         {selected && (
           <Pressable
@@ -214,6 +219,9 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: -1.5,
     fontVariant: ["tabular-nums"],
+  },
+  balanceSymbol: {
+    color: Colors.accent,
   },
   editBtn: {
     width: 36,
