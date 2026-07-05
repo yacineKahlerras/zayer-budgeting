@@ -1,0 +1,38 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Zayer app-icon foreground (transparent): a wallet with a coin dropping in.
+    Wallet body = app accent blue (#3B82F6); the coin = positive green
+    (#34D399) with a subtle currency slit, lifting into the wallet's top-right —
+    the budgeting "money in / trending up" note. Optically centered inside the
+    center ~66% safe zone so Android's adaptive mask never clips it.
+  -->
+  <defs>
+    <linearGradient id="wallet" x1="288" y1="392" x2="736" y2="712" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+    <linearGradient id="coin" x1="668" y1="300" x2="756" y2="388" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6EE7B7"/>
+      <stop offset="1" stop-color="#34D399"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(0, 8)">
+    <!-- Wallet body -->
+    <rect x="288" y="392" width="448" height="320" rx="70" fill="url(#wallet)"/>
+
+    <!-- Flap seam: a soft darker line across the top third suggesting the fold. -->
+    <path d="M312 470 H712" stroke="#0B0F1A" stroke-opacity="0.16"
+          stroke-width="10" stroke-linecap="round"/>
+
+    <!-- Clasp pocket + button on the right edge. -->
+    <path d="M736 500 h-104 a56 56 0 0 0 0 112 h104 Z"
+          fill="#0B0F1A" opacity="0.26"/>
+    <circle cx="648" cy="556" r="27" fill="#0B0F1A" opacity="0.5"/>
+    <circle cx="648" cy="556" r="13" fill="#93C5FD"/>
+
+    <!-- Coin dropping into the wallet (top-right), with a currency slit. -->
+    <circle cx="712" cy="344" r="46" fill="url(#coin)"/>
+    <rect x="705" y="320" width="14" height="48" rx="7" fill="#0B0F1A" opacity="0.35"/>
+  </g>
+</svg>

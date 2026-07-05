@@ -1,0 +1,16 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Monochrome foreground for Android 13+ themed icons: the wallet mark as a
+    single flat white shape (the OS tints it). Coin cut out of the body so it
+    stays legible as one silhouette. No gradients, no color.
+  -->
+  <g transform="translate(0, 8)" fill="#FFFFFF">
+    <!-- Wallet body with the clasp button punched out (even-odd). -->
+    <path fill-rule="evenodd" d="
+        M358 392 H666 a70 70 0 0 1 70 70 v180 a70 70 0 0 1 -70 70 H358
+        a70 70 0 0 1 -70 -70 V462 a70 70 0 0 1 70 -70 Z
+        M648 528 a28 28 0 0 0 0 56 a28 28 0 0 0 0 -56 Z"/>
+    <!-- Coin. -->
+    <circle cx="712" cy="344" r="46"/>
+  </g>
+</svg>

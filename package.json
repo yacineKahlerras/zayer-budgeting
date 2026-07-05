@@ -11,6 +11,7 @@
     "lint": "expo lint",
     "test": "jest",
     "e2e": "maestro test e2e/flows",
+    "icons": "node assets/icon-src/generate.js",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio"
   },
@@ -63,6 +64,7 @@
     "eslint-config-expo": "~10.0.0",
     "jest": "~29.7.0",
     "jest-expo": "~54.0.0",
+    "sharp": "^0.35.3",
     "typescript": "~5.9.2"
   },
   "private": true
