@@ -11,12 +11,16 @@ type Props = {
   header?: ReactElement;
   /** Restrict the list to one wallet, or undefined for all wallets. */
   walletId?: string;
+  /** Bump to force a first-page refetch (e.g. after an inline balance edit). */
+  refreshKey?: unknown;
 };
 
 /** Infinite-scrolling list of transactions grouped by day, bannered by month. */
-export function TransactionList({ header, walletId }: Props) {
-  const { sections, loading, done, loadMore } =
-    usePaginatedTransactions(walletId);
+export function TransactionList({ header, walletId, refreshKey }: Props) {
+  const { sections, loading, done, loadMore } = usePaginatedTransactions(
+    walletId,
+    refreshKey
+  );
 
   return (
     <SectionList

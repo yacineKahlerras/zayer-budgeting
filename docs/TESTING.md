@@ -91,6 +91,9 @@ covered. The suite has three layers:
 
 ### Screens & components
 - **Home**: balance header (name pill, derived balance, month in/out glance),
+  inline balance editor (pencil → centered dialog; seeds current balance,
+  previews the signed adjustment, saves by logging the difference as a
+  "Balance adjustment" transaction, refreshes the header + list in place),
   wallet switcher dialog (opens with >1 wallets), transaction list grouped by
   day, FAB → add-transaction with preset wallet.
 - **Add/edit transaction**: amount input (currency symbol, sanitizing),
@@ -144,6 +147,7 @@ covered. The suite has three layers:
 | import resolution + importRows | 12 | `__tests__/db/import.test.ts` |
 | shared UI (chip, segmented, amount, delete-row, modal-header) | 12 | `__tests__/components/ui.test.tsx` |
 | wallet picker dialog | 6 | `__tests__/components/wallet-picker.test.tsx` |
+| inline balance editor | 7 | `__tests__/components/balance-editor.test.tsx` |
 | add-transaction flow | 12 | `__tests__/components/add-transaction.test.tsx` |
 | edit-budget flow | 10 | `__tests__/components/edit-budget.test.tsx` |
 | stats helpers via screen | 6 | `__tests__/components/stats.test.tsx` |

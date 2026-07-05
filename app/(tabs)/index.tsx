@@ -12,22 +12,29 @@ import { listWalletsWithBalances, type WalletWithBalance } from "@/db/queries";
 export default function HomeScreen() {
   const [wallets, setWallets] = useState<WalletWithBalance[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  // Bumped after an inline balance edit to refetch the balance header and the
+  // transaction list (which don't blur/refocus, so focus effects won't re-run).
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const reload = useCallback(() => {
+    listWalletsWithBalances().then((w) => {
+      setWallets(w);
+      // Keep the current selection if it still exists; else the first wallet.
+      setSelected((cur) =>
+        cur && w.some((x) => x.id === cur) ? cur : w[0]?.id ?? null
+      );
+    });
+  }, []);
+
+  const handleBalanceEdited = useCallback(() => {
+    reload();
+    setRefreshKey((k) => k + 1);
+  }, [reload]);
 
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      listWalletsWithBalances().then((w) => {
-        if (cancelled) return;
-        setWallets(w);
-        // Keep the current selection if it still exists; else the first wallet.
-        setSelected((cur) =>
-          cur && w.some((x) => x.id === cur) ? cur : w[0]?.id ?? null
-        );
-      });
-      return () => {
-        cancelled = true;
-      };
-    }, [])
+      reload();
+    }, [reload])
   );
 
   function handleAdd() {
@@ -46,6 +53,7 @@ export default function HomeScreen() {
 
       <TransactionList
         walletId={selected ?? undefined}
+        refreshKey={refreshKey}
         header={
           <View>
             <View style={styles.topBar}>
@@ -63,6 +71,7 @@ export default function HomeScreen() {
               wallets={wallets}
               selectedWalletId={selected}
               onSelect={setSelected}
+              onBalanceEdited={handleBalanceEdited}
             />
             <Text style={styles.sectionTitle}>Transactions</Text>
           </View>

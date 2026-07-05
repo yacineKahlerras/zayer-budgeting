@@ -1,7 +1,14 @@
-import { ArrowDownLeft, ArrowUpRight, Check, ChevronDown } from "lucide-react-native";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  Pencil,
+} from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { BalanceEditor } from "@/components/home/balance-editor";
 import { Colors } from "@/constants/theme";
 import {
   getPeriodSummary,
@@ -21,12 +28,16 @@ export function AccountCard({
   wallets,
   selectedWalletId,
   onSelect,
+  onBalanceEdited,
 }: {
   wallets: WalletWithBalance[];
   selectedWalletId: string | null;
   onSelect: (id: string) => void;
+  /** Called after an inline balance edit is saved, so the screen can reload. */
+  onBalanceEdited?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [month, setMonth] = useState<PeriodSummary | null>(null);
   const selected =
     wallets.find((w) => w.id === selectedWalletId) ?? wallets[0] ?? null;
@@ -65,9 +76,26 @@ export function AccountCard({
         </Pressable>
       </View>
 
-      <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit>
-        {formatCents(selected?.balance ?? 0, selected?.currency)}
-      </Text>
+      <View style={styles.balanceRow}>
+        <Text
+          style={styles.balance}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
+          {formatCents(selected?.balance ?? 0, selected?.currency)}
+        </Text>
+        {selected && (
+          <Pressable
+            hitSlop={12}
+            onPress={() => setEditing(true)}
+            style={styles.editBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Edit balance"
+          >
+            <Pencil size={16} color={Colors.textMuted} />
+          </Pressable>
+        )}
+      </View>
 
       {/* Month at a glance */}
       <View style={styles.glanceRow}>
@@ -87,6 +115,14 @@ export function AccountCard({
       </View>
 
       <View style={styles.divider} />
+
+      {/* Inline balance editor */}
+      <BalanceEditor
+        wallet={selected}
+        visible={editing}
+        onClose={() => setEditing(false)}
+        onSaved={() => onBalanceEdited?.()}
+      />
 
       {/* Wallet picker */}
       <Modal
@@ -165,13 +201,29 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: "600",
   },
+  balanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 10,
+  },
   balance: {
+    flexShrink: 1,
     color: Colors.text,
     fontSize: 52,
     fontWeight: "800",
     letterSpacing: -1.5,
-    marginTop: 10,
     fontVariant: ["tabular-nums"],
+  },
+  editBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
   glanceRow: {
     flexDirection: "row",
