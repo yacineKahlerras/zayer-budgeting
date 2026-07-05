@@ -4,9 +4,12 @@ import { db } from "@/db/client";
 import {
   addTransaction,
   addWallet,
+  adjustWalletBalance,
   deleteWallet,
   getOrCreateWallet,
+  getTransactionsPage,
   getWallet,
+  getWalletBalance,
   listWallets,
   listWalletsWithBalances,
   updateWallet,
@@ -121,6 +124,88 @@ describe("deleteWallet", () => {
     await deleteWallet(a);
     const ws = await listWallets();
     expect(ws.map((w) => w.name)).toEqual(["B"]);
+  });
+});
+
+describe("getWalletBalance", () => {
+  it("returns the derived balance for one wallet", async () => {
+    const id = await seedWallet("W", "USD", 100_00);
+    await addTransaction({
+      walletId: id,
+      categoryId: null,
+      subcategoryId: null,
+      amount: 30_00,
+      direction: "expense",
+      title: null,
+      note: null,
+      date: new Date(2026, 0, 1),
+    });
+    expect(await getWalletBalance(id)).toBe(70_00);
+  });
+
+  it("returns 0 for an unknown wallet", async () => {
+    expect(await getWalletBalance("nope")).toBe(0);
+  });
+});
+
+describe("adjustWalletBalance", () => {
+  async function walletAt(cents: number) {
+    // A wallet whose derived balance equals `cents` via its initial balance.
+    return seedWallet("Main", "USD", cents);
+  }
+
+  it("logs an expense for the shortfall when lowering the balance", async () => {
+    const id = await walletAt(100_00);
+    const txId = await adjustWalletBalance(id, 50_00);
+    expect(txId).not.toBeNull();
+    // Balance now matches the target.
+    expect(await getWalletBalance(id)).toBe(50_00);
+    // And the adjustment shows up as a −$50 expense titled accordingly.
+    const [tx] = await getTransactionsPage(0, 10, id);
+    expect(tx.amount).toBe(-50_00);
+    expect(tx.title).toBe("Balance adjustment");
+  });
+
+  it("logs an income when raising the balance", async () => {
+    const id = await walletAt(50_00);
+    await adjustWalletBalance(id, 120_00);
+    expect(await getWalletBalance(id)).toBe(120_00);
+    const [tx] = await getTransactionsPage(0, 10, id);
+    expect(tx.amount).toBe(70_00);
+    expect(tx.title).toBe("Balance adjustment");
+  });
+
+  it("is a no-op when the balance is unchanged", async () => {
+    const id = await walletAt(80_00);
+    expect(await adjustWalletBalance(id, 80_00)).toBeNull();
+    expect(await getTransactionsPage(0, 10, id)).toHaveLength(0);
+  });
+
+  it("accounts for existing transactions, not just the initial balance", async () => {
+    const id = await walletAt(0);
+    await addTransaction({
+      walletId: id,
+      categoryId: null,
+      subcategoryId: null,
+      amount: 200_00,
+      direction: "income",
+      title: null,
+      note: null,
+      date: new Date(2026, 0, 1),
+    });
+    // Derived balance is 200; adjust down to 150 → logs a −50 expense.
+    await adjustWalletBalance(id, 150_00);
+    expect(await getWalletBalance(id)).toBe(150_00);
+    const [tx] = await getTransactionsPage(0, 1, id);
+    expect(tx.amount).toBe(-50_00);
+  });
+
+  it("can target a negative balance", async () => {
+    const id = await walletAt(10_00);
+    await adjustWalletBalance(id, -5_00); // e.g. an overdrawn account
+    expect(await getWalletBalance(id)).toBe(-5_00);
+    const [tx] = await getTransactionsPage(0, 1, id);
+    expect(tx.amount).toBe(-15_00); // 10 → −5 is a −15 expense
   });
 });
 

@@ -17,11 +17,13 @@ import { ModalHeader } from "@/components/ui/modal-header";
 import { Colors } from "@/constants/theme";
 import {
   addWallet,
+  adjustWalletBalance,
   deleteWallet,
   getWallet,
+  getWalletBalance,
   updateWallet,
 } from "@/db/queries";
-import { toCents } from "@/utils/format";
+import { formatCents, toCents } from "@/utils/format";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "DZD", "MAD", "TND", "SAR", "AED", "EGP"];
 
@@ -31,7 +33,12 @@ export default function EditWallet() {
 
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("USD");
-  const [initialBalance, setInitialBalance] = useState("");
+  // For a NEW wallet this is the starting balance; when EDITING it is the
+  // current (derived) balance — changing it logs an adjustment transaction.
+  const [balance, setBalance] = useState("");
+  // The balance the field was loaded with, so we only log an adjustment when
+  // it actually changes.
+  const [loadedBalanceCents, setLoadedBalanceCents] = useState(0);
   const [loading, setLoading] = useState(editing);
   const [saving, setSaving] = useState(false);
 
@@ -39,12 +46,13 @@ export default function EditWallet() {
     if (!id) return;
     let cancelled = false;
     (async () => {
-      const w = await getWallet(id);
+      const [w, bal] = await Promise.all([getWallet(id), getWalletBalance(id)]);
       if (cancelled) return;
       if (w) {
         setName(w.name);
         setCurrency(w.currency);
-        setInitialBalance((w.initialBalance / 100).toFixed(2));
+        setBalance((bal / 100).toFixed(2));
+        setLoadedBalanceCents(bal);
       }
       // Clear loading even when the wallet is missing, so we don't spin forever.
       setLoading(false);
@@ -59,17 +67,24 @@ export default function EditWallet() {
       Alert.alert("Name required", "Give the wallet a name.");
       return;
     }
-    const payload = {
-      name: name.trim(),
-      currency,
-      initialBalance: toCents(initialBalance),
-    };
+    const balanceCents = toCents(balance);
     setSaving(true);
     try {
       if (editing && id) {
-        await updateWallet(id, payload);
+        // initialBalance is never edited here — the balance is changed by
+        // logging the difference as a transaction, so the ledger stays honest.
+        await updateWallet(id, {
+          name: name.trim(),
+          currency,
+          initialBalance: (await getWallet(id))?.initialBalance ?? 0,
+        });
+        await adjustWalletBalance(id, balanceCents);
       } else {
-        await addWallet(payload);
+        await addWallet({
+          name: name.trim(),
+          currency,
+          initialBalance: balanceCents,
+        });
       }
       router.back();
     } catch (e) {
@@ -101,6 +116,9 @@ export default function EditWallet() {
       { cancelable: true }
     );
   }
+
+  // The transaction that saving would log: target − loaded balance.
+  const adjustmentCents = toCents(balance) - loadedBalanceCents;
 
   if (loading) {
     return (
@@ -153,22 +171,46 @@ export default function EditWallet() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Starting balance</Text>
+          <Text style={styles.label}>
+            {editing ? "Current balance" : "Starting balance"}
+          </Text>
           <TextInput
             style={styles.input}
-            value={initialBalance}
+            value={balance}
             onChangeText={(t) =>
-              setInitialBalance(
-                t.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1")
-              )
+              setBalance(t.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1"))
             }
             placeholder="0.00"
             placeholderTextColor={Colors.textMuted}
             keyboardType="decimal-pad"
           />
-          <Text style={styles.hint}>
-            The balance before any transactions are recorded.
-          </Text>
+          {editing ? (
+            adjustmentCents !== 0 ? (
+              <Text style={styles.hint}>
+                Logs a{" "}
+                <Text
+                  style={{
+                    color:
+                      adjustmentCents < 0 ? Colors.negative : Colors.positive,
+                    fontWeight: "700",
+                  }}
+                >
+                  {adjustmentCents < 0 ? "-" : "+"}
+                  {formatCents(adjustmentCents, currency)}
+                </Text>{" "}
+                {adjustmentCents < 0 ? "expense" : "income"} to match.
+              </Text>
+            ) : (
+              <Text style={styles.hint}>
+                Change it to record an adjustment transaction for the
+                difference.
+              </Text>
+            )
+          ) : (
+            <Text style={styles.hint}>
+              The balance before any transactions are recorded.
+            </Text>
+          )}
         </View>
 
         {editing && <DeleteRow label="Delete wallet" onPress={handleDelete} />}

@@ -120,6 +120,49 @@ export async function getWallet(id: string) {
   return row ?? null;
 }
 
+/** The current derived balance (initialBalance + income − expense) for one
+ *  wallet, in cents. Returns 0 for an unknown wallet. */
+export async function getWalletBalance(id: string): Promise<number> {
+  const [row] = await db
+    .select({
+      initialBalance: wallets.initialBalance,
+      income: sql<number>`coalesce(sum(case when ${transactions.direction} = 'income' then ${transactions.amount} else 0 end), 0)`,
+      expense: sql<number>`coalesce(sum(case when ${transactions.direction} = 'expense' then ${transactions.amount} else 0 end), 0)`,
+    })
+    .from(wallets)
+    .leftJoin(transactions, eq(transactions.walletId, wallets.id))
+    .where(eq(wallets.id, id))
+    .groupBy(wallets.id);
+  if (!row) return 0;
+  return row.initialBalance + row.income - row.expense;
+}
+
+/**
+ * Set a wallet's balance to `targetCents` by logging the DIFFERENCE as a
+ * transaction — never by editing initialBalance, so the ledger always explains
+ * the balance. Lowering the balance records an expense, raising it an income,
+ * titled "Balance adjustment". No-op (returns null) when nothing changes.
+ * Returns the new transaction's id.
+ */
+export async function adjustWalletBalance(
+  id: string,
+  targetCents: number
+): Promise<string | null> {
+  const current = await getWalletBalance(id);
+  const delta = targetCents - current;
+  if (delta === 0) return null;
+  return addTransaction({
+    walletId: id,
+    categoryId: null,
+    subcategoryId: null,
+    amount: Math.abs(delta),
+    direction: delta < 0 ? "expense" : "income",
+    title: "Balance adjustment",
+    note: null,
+    date: new Date(),
+  });
+}
+
 /* ------------------------------ Categories ------------------------------- */
 
 export type CategoryWithSubs = {
