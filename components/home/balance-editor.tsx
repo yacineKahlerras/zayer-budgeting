@@ -177,9 +177,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   symbol: {
-    color: Colors.textMuted,
+    color: Colors.accent,
     fontSize: 20,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   input: {
     flex: 1,
