@@ -77,6 +77,8 @@ export default function AddTransaction() {
   const [walletIndex, setWalletIndex] = useState(0);
   const [tree, setTree] = useState<CategoryWithSubs[]>([]);
   const [openCategoryId, setOpenCategoryId] = useState<string | null>(null);
+  /** The whole category picker is collapsed by default; the summary row opens it. */
+  const [categoryListOpen, setCategoryListOpen] = useState(false);
   /** Selected category — valid on its own, no subcategory required. */
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [subcategoryId, setSubcategoryId] = useState<string | null>(null);
@@ -140,6 +142,12 @@ export default function AddTransaction() {
       setTitle(tx.title ?? "");
       setMemo(tx.note ?? "");
       setDate(tx.date);
+      // Reveal the picker up front when editing something already categorized,
+      // and open its subcategory group so the current choice is visible.
+      if (tx.categoryId || tx.subcategoryId) {
+        setCategoryListOpen(true);
+        setOpenCategoryId(tx.categoryId);
+      }
       if (tx.note || tx.title) setExpanded(true);
       pendingWalletId.current = tx.walletId;
     });
@@ -171,9 +179,16 @@ export default function AddTransaction() {
   function selectDirection(next: Direction) {
     if (next === direction) return;
     setDirection(next);
+    setCategoryListOpen(false);
     setOpenCategoryId(null);
     setCategoryId(null);
     setSubcategoryId(null);
+  }
+
+  /** Fold/unfold the whole category picker. */
+  function toggleCategoryList() {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setCategoryListOpen((v) => !v);
   }
 
   const wallet = wallets[walletIndex] ?? null;
@@ -365,8 +380,29 @@ export default function AddTransaction() {
           </View>
         </Pressable>
 
-        {/* Category — selectable on its own; subcategories optionally refine */}
+        {/* Category — collapsed by default; the summary row opens the picker,
+            and subcategories optionally refine the chosen category. */}
         <Text style={styles.sectionLabel}>Category · optional</Text>
+        <Pressable style={styles.categorySummary} onPress={toggleCategoryList}>
+          <Text
+            style={[
+              styles.categorySummaryText,
+              selectionName && styles.categorySummaryTextSelected,
+            ]}
+            numberOfLines={1}
+          >
+            {selectionName ?? "Choose category"}
+          </Text>
+          <ChevronDown
+            size={18}
+            color={Colors.textMuted}
+            style={{
+              transform: [{ rotate: categoryListOpen ? "180deg" : "0deg" }],
+            }}
+          />
+        </Pressable>
+
+        {categoryListOpen && (
         <View style={styles.rows}>
           {tree.map((c, i) => {
             const Icon = categoryIcon(c.icon);
@@ -449,6 +485,7 @@ export default function AddTransaction() {
             );
           })}
         </View>
+        )}
 
         {/* More options */}
         <Pressable style={styles.moreRow} onPress={toggleExpanded}>
@@ -616,7 +653,29 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 8,
   },
+  categorySummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
+  },
+  categorySummaryText: {
+    flex: 1,
+    fontSize: 14.5,
+    color: Colors.textMuted,
+  },
+  categorySummaryTextSelected: {
+    color: Colors.text,
+    fontWeight: "600",
+  },
   rows: {
+    marginTop: 8,
     marginBottom: 4,
   },
   catRow: {
