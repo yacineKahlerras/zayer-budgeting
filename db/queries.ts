@@ -802,15 +802,61 @@ export async function getOrCreateWallet(
 }
 
 /**
- * Find a top-level category by name (case-insensitive), or create it with the
- * given kind. Returns the category id.
+ * Resolve an imported category name to our tree. Source apps (e.g. Wallet by
+ * BudgetBakers) export their SUBCATEGORY names in the category column, so a
+ * name that matches one of our subcategories (case-insensitive, same kind)
+ * resolves to that subcategory under its parent — never to a duplicate
+ * top-level category. Otherwise it matches or creates a top-level category.
  */
-export async function getOrCreateCategory(
+export async function resolveImportCategory(
   name: string,
   kind: "expense" | "income"
-): Promise<string> {
+): Promise<{ categoryId: string; subcategoryId: string | null }> {
   const tree = await listCategoryTree();
-  const match = tree.find((c) => c.name.toLowerCase() === name.toLowerCase());
-  if (match) return match.id;
-  return addCategory({ name, kind, icon: null });
+  const lower = name.toLowerCase();
+
+  for (const c of tree) {
+    if (c.kind !== kind) continue;
+    const sub = c.subs.find((s) => s.name.toLowerCase() === lower);
+    if (sub) return { categoryId: c.id, subcategoryId: sub.id };
+  }
+
+  const match = tree.find((c) => c.name.toLowerCase() === lower);
+  if (match) return { categoryId: match.id, subcategoryId: null };
+
+  const created = await addCategory({ name, kind, icon: null });
+  return { categoryId: created, subcategoryId: null };
+}
+
+/**
+ * One-time repair for data imported before subcategory mapping existed: a
+ * top-level category whose name duplicates another category's subcategory
+ * (case-insensitive, same kind) is absorbed into that subcategory — its
+ * transactions and budgets are retargeted, then the duplicate is deleted.
+ * Idempotent and cheap when there is nothing to absorb; safe every launch.
+ */
+export async function absorbDuplicateCategories(): Promise<void> {
+  const tree = await listCategoryTree();
+
+  for (const dupe of tree) {
+    // Only absorb leaf, user-created categories; a category with its own
+    // subcategories is a real tree node, not an import artifact.
+    if (dupe.subs.length > 0) continue;
+
+    const target = tree
+      .filter((c) => c.id !== dupe.id && c.kind === dupe.kind)
+      .flatMap((c) => c.subs.map((s) => ({ parent: c, sub: s })))
+      .find(({ sub }) => sub.name.toLowerCase() === dupe.name.toLowerCase());
+    if (!target) continue;
+
+    await db
+      .update(transactions)
+      .set({ categoryId: target.parent.id, subcategoryId: target.sub.id })
+      .where(eq(transactions.categoryId, dupe.id));
+    await db
+      .update(budgets)
+      .set({ categoryId: target.parent.id, subcategoryId: target.sub.id })
+      .where(eq(budgets.categoryId, dupe.id));
+    await db.delete(categories).where(eq(categories.id, dupe.id));
+  }
 }

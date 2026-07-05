@@ -16,8 +16,8 @@ import { File } from "expo-file-system";
 
 import {
   addTransaction,
-  getOrCreateCategory,
   getOrCreateWallet,
+  resolveImportCategory,
 } from "@/db/queries";
 
 export type ImportPreview = {
@@ -189,7 +189,10 @@ export async function previewCsvFile(uri: string): Promise<ImportPreview> {
  */
 export async function importRows(rows: ParsedRow[]): Promise<number> {
   const walletCache = new Map<string, string>();
-  const categoryCache = new Map<string, string>();
+  const categoryCache = new Map<
+    string,
+    { categoryId: string; subcategoryId: string | null }
+  >();
   let inserted = 0;
 
   for (const r of rows) {
@@ -200,20 +203,23 @@ export async function importRows(rows: ParsedRow[]): Promise<number> {
       walletCache.set(wKey, walletId);
     }
 
-    let categoryId: string | null = null;
+    // Source apps export their subcategory names in the category column, so
+    // resolve against subcategories first (see resolveImportCategory).
+    let scope: { categoryId: string; subcategoryId: string | null } | null =
+      null;
     if (r.category) {
-      const cKey = r.category.toLowerCase();
-      categoryId = categoryCache.get(cKey) ?? null;
-      if (!categoryId) {
-        categoryId = await getOrCreateCategory(r.category, r.direction);
-        categoryCache.set(cKey, categoryId);
+      const cKey = `${r.category.toLowerCase()}|${r.direction}`;
+      scope = categoryCache.get(cKey) ?? null;
+      if (!scope) {
+        scope = await resolveImportCategory(r.category, r.direction);
+        categoryCache.set(cKey, scope);
       }
     }
 
     await addTransaction({
       walletId,
-      categoryId,
-      subcategoryId: null,
+      categoryId: scope?.categoryId ?? null,
+      subcategoryId: scope?.subcategoryId ?? null,
       amount: r.amountCents,
       direction: r.direction,
       title: null,
