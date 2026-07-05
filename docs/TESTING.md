@@ -166,7 +166,27 @@ covered. The suite has three layers:
 ```bash
 npm test          # unit + integration + component (Jest)
 npm run e2e       # Maestro device flows (emulator + Metro must be running)
+npm run apk       # build a standalone release APK → dist/ (see below)
 ```
+
+### Building the APK (`npm run apk`)
+
+`scripts/build-apk.mjs` produces a standalone release APK (JS bundled in, no
+Metro) at `dist/Zayer-<version>-release.apk`. It builds from a short path
+(`C:\zb`) because `react-native-keyboard-controller`'s New-Arch C++ codegen
+exceeds Windows' 260-char path limit in the real project dir.
+
+- `npm run apk` — full build: sync source → `npm install` → `expo prebuild
+  --clean` (regenerates the app icon + name from `app.json`) → gradle → copy
+  to `dist/`.
+- `npm run apk -- --fast` — skips `expo prebuild`. Use when only JS/TS
+  changed; do NOT use after editing `app.json`, the icon, or `assets/`.
+- `npm run apk -- --no-deps` — skips `npm install` in the build copy.
+
+Requires Windows, JDK 17 (Android Studio's JBR), and the Android SDK/NDK. Edit
+the `BUILD_DIR` / `JAVA_HOME` / `SDK_DIR` constants at the top of the script if
+your machine differs. Signed with the debug keystore — fine for sideloading,
+not for the Play Store.
 
 See `e2e/README.md` for the Maestro CLI setup.
 

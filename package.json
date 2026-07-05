@@ -12,6 +12,7 @@
     "test": "jest",
     "e2e": "maestro test e2e/flows",
     "icons": "node assets/icon-src/generate.js",
+    "apk": "node scripts/build-apk.mjs",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio"
   },
