@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Zayer",
-    "slug": "Zayer Budgeting",
+    "slug": "Zayer-Budgeting",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -46,6 +46,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e68266d6-c57f-4094-a96c-9b7d83b9af5f"
+      }
     }
   }
 }
