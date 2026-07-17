@@ -15,6 +15,7 @@ import {
   LayoutAnimation,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -221,11 +222,19 @@ export default function AddTransaction() {
     setOpenCategoryId(catId);
   }
 
-  /** Tapping a subcategory refines the selection; tapping it again clears the
-   *  refinement but keeps the category. */
+  /** Tapping a subcategory refines the selection and collapses the whole picker
+   *  (the choice is final). Tapping the already-selected subcategory clears the
+   *  refinement but keeps the category, and leaves the picker open to re-pick. */
   function selectSubcategory(catId: string, subId: string) {
     setCategoryId(catId);
-    setSubcategoryId((cur) => (cur === subId ? null : subId));
+    if (subcategoryId === subId) {
+      // Toggling the current refinement off — stay open to choose another.
+      setSubcategoryId(null);
+      return;
+    }
+    setSubcategoryId(subId);
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setCategoryListOpen(false);
   }
 
   /** Open the wallet dialog — even with a single wallet, so the choice is
@@ -412,7 +421,13 @@ export default function AddTransaction() {
         </Pressable>
 
         {categoryListOpen && (
-        <View style={styles.rows}>
+        <ScrollView
+          style={styles.rows}
+          contentContainerStyle={styles.rowsContent}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {tree.map((c, i) => {
             const Icon = categoryIcon(c.icon);
             const isLast = i === tree.length - 1;
@@ -493,7 +508,7 @@ export default function AddTransaction() {
               </View>
             );
           })}
-        </View>
+        </ScrollView>
         )}
 
         {/* More options */}
@@ -694,6 +709,13 @@ const styles = StyleSheet.create({
   rows: {
     marginTop: 8,
     marginBottom: 4,
+    // Bound the open picker so its own scroll takes over instead of pushing the
+    // page down — the summary toggle above stays reachable no matter how many
+    // subcategories are expanded.
+    maxHeight: 320,
+  },
+  rowsContent: {
+    paddingBottom: 4,
   },
   catRow: {
     flexDirection: "row",

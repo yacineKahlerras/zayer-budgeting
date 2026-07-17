@@ -69,14 +69,30 @@ describe("new transaction", () => {
     expect(screen.queryByText("Choose category")).toBeNull();
   });
 
-  it("subcategory refines; tapping it again clears the refinement", async () => {
+  it("collapses the whole picker once a subcategory is picked", async () => {
     await renderScreen();
     fireEvent.press(screen.getByText("Choose category"));
     fireEvent.press(screen.getByText("Food"));
+    // Picker is open: both the summary and the list show Groceries.
+    expect(screen.getByText("Groceries")).toBeTruthy();
     fireEvent.press(screen.getByText("Groceries"));
-    // Summary (first matching text) now reads Groceries.
-    expect(screen.getAllByText("Groceries").length).toBeGreaterThanOrEqual(1);
-    fireEvent.press(screen.getAllByText("Groceries")[1] ?? screen.getAllByText("Groceries")[0]);
+    // Now collapsed: the list rows are gone, so the sibling "Housing" category
+    // is no longer rendered, and the summary reads the chosen subcategory.
+    expect(screen.queryByText("Housing")).toBeNull();
+    expect(screen.getByText("Groceries")).toBeTruthy();
+  });
+
+  it("keeps the picker open and re-refines after toggling a subcategory off", async () => {
+    await renderScreen();
+    fireEvent.press(screen.getByText("Choose category"));
+    fireEvent.press(screen.getByText("Food"));
+    fireEvent.press(screen.getByText("Groceries")); // pick → collapses
+    // Re-open: the summary and the list both read Groceries now.
+    fireEvent.press(screen.getByText("Groceries"));
+    const rows = screen.getAllByText("Groceries");
+    // Toggle the selected subcategory (the list row) off — picker stays open.
+    fireEvent.press(rows[rows.length - 1]);
+    expect(screen.getByText("Housing")).toBeTruthy();
   });
 
   it("switching direction clears the selection and collapses the picker", async () => {
