@@ -117,6 +117,16 @@ describe("getTransactionsPage", () => {
     expect(mine.map((t) => t.title)).toEqual(["mine"]);
   });
 
+  it("carries each row's wallet currency (not a hardcoded default)", async () => {
+    const usd = await addWallet({ name: "Cash", currency: "USD", initialBalance: 0 });
+    const eur = await addWallet({ name: "Savings", currency: "EUR", initialBalance: 0 });
+    await addTransaction({ ...base(usd), title: "us", date: new Date(2026, 0, 2) });
+    await addTransaction({ ...base(eur), title: "eu", date: new Date(2026, 0, 1) });
+    const rows = await getTransactionsPage(0, 10);
+    const byTitle = Object.fromEntries(rows.map((r) => [r.title, r.currency]));
+    expect(byTitle).toEqual({ us: "USD", eu: "EUR" });
+  });
+
   it("signs amounts: expense negative, income positive", async () => {
     const { walletId } = await seed();
     await addTransaction({

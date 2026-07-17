@@ -50,7 +50,7 @@ export function TransactionRow({ item }: { item: TransactionListItem }) {
           ]}
         >
           {isIncome ? "+" : "-"}
-          {formatCents(item.amount)}
+          {formatCents(item.amount, item.currency)}
         </Text>
         <Text style={styles.rowDate}>{dateLabel}</Text>
       </View>

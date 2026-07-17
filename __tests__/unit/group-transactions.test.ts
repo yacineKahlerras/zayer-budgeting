@@ -5,6 +5,7 @@ function tx(id: string, date: Date): TransactionListItem {
   return {
     id,
     amount: -100,
+    currency: "USD",
     title: "t",
     categoryName: "c",
     note: null,

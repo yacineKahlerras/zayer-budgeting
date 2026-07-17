@@ -298,6 +298,7 @@ export async function getTransaction(
 export type TransactionListItem = {
   id: string;
   amount: number; // signed cents: negative for expense
+  currency: string; // the wallet's currency, so the row formats correctly
   title: string;
   categoryName: string;
   note: string | null;
@@ -314,6 +315,7 @@ function toListItem(r: {
   id: string;
   amount: number;
   direction: "expense" | "income";
+  currency: string;
   title: string | null;
   subName: string | null;
   catName: string | null;
@@ -324,6 +326,7 @@ function toListItem(r: {
     id: r.id,
     // sign the amount for display: expense negative, income positive
     amount: r.direction === "expense" ? -r.amount : r.amount,
+    currency: r.currency,
     // Display fallback, computed at read time so it can never go stale:
     // custom title > subcategory name > category name > direction label.
     title:
@@ -351,6 +354,7 @@ export async function getTransactionsPage(
       id: transactions.id,
       amount: transactions.amount,
       direction: transactions.direction,
+      currency: wallets.currency,
       title: transactions.title,
       subName: subcategories.name,
       catName: categories.name,
@@ -358,6 +362,7 @@ export async function getTransactionsPage(
       date: transactions.date,
     })
     .from(transactions)
+    .innerJoin(wallets, eq(transactions.walletId, wallets.id))
     .leftJoin(
       subcategories,
       eq(transactions.subcategoryId, subcategories.id)
@@ -799,6 +804,7 @@ export async function searchTransactions(
       id: transactions.id,
       amount: transactions.amount,
       direction: transactions.direction,
+      currency: wallets.currency,
       title: transactions.title,
       subName: subcategories.name,
       catName: categories.name,
@@ -806,6 +812,7 @@ export async function searchTransactions(
       date: transactions.date,
     })
     .from(transactions)
+    .innerJoin(wallets, eq(transactions.walletId, wallets.id))
     .leftJoin(subcategories, eq(transactions.subcategoryId, subcategories.id))
     .leftJoin(categories, effectiveCategoryJoin())
     .where(
