@@ -601,7 +601,10 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
-    paddingBottom: 120,
+    // No large tail padding here: extra scroll room lets the category list's
+    // over-scroll drag the whole form up and hide the amount. The breathing
+    // room lives on the bottom section (`moreRow`/`advanced`) instead.
+    paddingBottom: 24,
   },
 
   amountSection: {
@@ -785,6 +788,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 14,
     paddingTop: 14,
+    // Breathing room below the toggle when the advanced section is collapsed,
+    // so "More options" isn't jammed against the bottom edge.
+    paddingBottom: 24,
     borderTopWidth: 1,
     borderColor: Colors.border,
   },
@@ -797,6 +803,8 @@ const styles = StyleSheet.create({
   advanced: {
     marginTop: 16,
     gap: 14,
+    // Keep the last field (date/memo) clear of the keyboard and the bottom edge.
+    paddingBottom: 96,
   },
   field: {
     gap: 6,
